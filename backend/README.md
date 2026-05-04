@@ -18,8 +18,15 @@ backend/
 - ถ้าใช้ Supabase Database อย่างเดียว ให้เก็บ schema และ migration ไว้ใน `backend/supabase/migrations`
 - ถ้าต้องมี logic ฝั่ง server ให้ใช้ Supabase Edge Functions ใน `backend/supabase/functions`
 - ถ้าจะมี secret เช่น `SUPABASE_SERVICE_ROLE_KEY` ให้ใส่ใน env ของ Supabase หรือ CI เท่านั้น ห้าม commit ค่าใช้งานจริง
+- migration เริ่มต้นของโปรเจกต์นี้ถูกเตรียมไว้แล้ว และออกแบบให้รองรับข้อมูลที่หน้าเว็บใช้จริง เช่น พนักงาน ตารางกะ สต็อก คำขอ และ issue reports
+- seed ตัวอย่างอ้างอิงจาก mock data ปัจจุบันของแอป เพื่อให้เริ่มย้ายจาก local state ไป Supabase ได้ง่ายขึ้น
 
 ## หมายเหตุ
 
 - GitHub Pages จะ deploy ได้เฉพาะ frontend
 - backend จริงจะรันบน Supabase ไม่ได้รันบน GitHub Pages
+
+## Frontend Integration
+
+- ฝั่งเว็บมี service layer เตรียมไว้ที่ `src/services/supabase`
+- ถ้าจะเริ่มเชื่อมจริง ให้ตั้งค่า `.env` จาก `.env.example` แล้วค่อยเรียกใช้ loader ใน service layer เพื่อดึงข้อมูลจาก Supabase
