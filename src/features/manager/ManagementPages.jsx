@@ -1705,21 +1705,34 @@ export function ManagerLoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const portalMessage = location.state?.portalMessage ?? '';
 
   if (managerSessionActive) {
     return <Navigate to={location.state?.returnTo ?? routePaths.home} replace />;
   }
 
-  const handleSubmit = () => {
-    const isLoggedIn = managerLogin(phone, password);
-    if (!isLoggedIn) {
-      setError('ไม่พบข้อมูลผู้จัดการจากเบอร์โทรและรหัสผ่านที่กรอก');
+  const handleSubmit = async () => {
+    if (isSubmitting) {
       return;
     }
 
-    setError('');
-    navigate(location.state?.returnTo ?? routePaths.home, { replace: true });
+    setIsSubmitting(true);
+
+    try {
+      const isLoggedIn = await managerLogin(phone, password);
+      if (!isLoggedIn) {
+        setError('ไม่พบข้อมูลผู้จัดการจากเบอร์โทรและรหัสผ่านที่กรอก');
+        return;
+      }
+
+      setError('');
+      navigate(location.state?.returnTo ?? routePaths.home, { replace: true });
+    } catch {
+      setError('เชื่อมต่อข้อมูลผู้จัดการไม่สำเร็จ ลองใหม่อีกครั้ง');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

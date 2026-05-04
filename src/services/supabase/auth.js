@@ -1,43 +1,32 @@
 import { requireSupabase } from './client.js';
-import { mapEmployeeRow, mapSettingsRow } from './mappers.js';
-
-function normalizeCredential(value) {
-  return String(value ?? '').replace(/[^0-9A-Za-z]/g, '').toLowerCase();
-}
+import { mapEmployeeRow } from './mappers.js';
 
 export async function loginEmployeePortal(phone, password) {
   const client = requireSupabase();
-  const normalizedPhone = normalizeCredential(phone);
-  const normalizedPassword = normalizeCredential(password);
-
-  const result = await client
-    .from('employees')
-    .select('*')
-    .eq('active', true);
+  const result = await client.rpc('authenticate_employee_portal', {
+    login_phone: String(phone ?? ''),
+    login_password: String(password ?? ''),
+  });
 
   if (result.error) {
     throw result.error;
   }
 
-  const matchedEmployee = result.data.find((employee) => {
-    return normalizeCredential(employee.phone) === normalizedPhone
-      && normalizeCredential(employee.password) === normalizedPassword;
-  });
+  const matchedEmployee = Array.isArray(result.data) ? result.data[0] : null;
 
   return matchedEmployee ? mapEmployeeRow(matchedEmployee) : null;
 }
 
 export async function loginManagerPortal(phone, password) {
   const client = requireSupabase();
-  const normalizedPhone = normalizeCredential(phone);
-  const normalizedPassword = normalizeCredential(password);
+  const result = await client.rpc('authenticate_manager_portal', {
+    login_phone: String(phone ?? ''),
+    login_password: String(password ?? ''),
+  });
 
-  const result = await client.from('app_settings').select('*').limit(1).maybeSingle();
   if (result.error) {
     throw result.error;
   }
 
-  const settings = mapSettingsRow(result.data);
-  return normalizeCredential(settings.managerPhone) === normalizedPhone
-    && normalizeCredential(settings.managerPassword) === normalizedPassword;
+  return result.data === true;
 }

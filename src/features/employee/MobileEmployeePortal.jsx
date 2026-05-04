@@ -349,16 +349,29 @@ function EmployeePortalLoginCard({ onLogin, onSuccess }) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
-    const result = onLogin(phone, password);
-    if (!result) {
-      setError('ไม่พบข้อมูลพนักงานจากเบอร์โทรและรหัสผ่านที่กรอก');
+  const handleSubmit = async () => {
+    if (isSubmitting) {
       return;
     }
 
-    setError('');
-    onSuccess?.(result);
+    setIsSubmitting(true);
+
+    try {
+      const result = await onLogin(phone, password);
+      if (!result) {
+        setError('ไม่พบข้อมูลพนักงานจากเบอร์โทรและรหัสผ่านที่กรอก');
+        return;
+      }
+
+      setError('');
+      onSuccess?.(result);
+    } catch {
+      setError('เชื่อมต่อข้อมูลพนักงานไม่สำเร็จ ลองใหม่อีกครั้ง');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -385,7 +398,7 @@ function EmployeePortalLoginCard({ onLogin, onSuccess }) {
           </div>
         </label>
         <div className="employee-mobile-login-actions">
-          <button type="button" className="primary-inline employee-mobile-submit" onClick={handleSubmit} disabled={!phone.trim() || !password.trim()}>เข้าสู่ระบบ</button>
+          <button type="button" className="primary-inline employee-mobile-submit" onClick={handleSubmit} disabled={!phone.trim() || !password.trim() || isSubmitting}>{isSubmitting ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button>
           <Link className="employee-mobile-login-manager-link" to={routePaths.managerLogin}>ไปหน้า Login ผู้จัดการ</Link>
         </div>
       </div>

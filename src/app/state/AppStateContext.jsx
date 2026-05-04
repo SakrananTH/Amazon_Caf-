@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { calendarDaySettings as seedCalendarDaySettings, employeeAvailabilityCalendar as seedEmployeeAvailabilityCalendar, employees as seedEmployees, inventoryItems as seedInventoryItems, issueReports as seedIssueReports, requests as seedRequests, timeBlocks as seedTimeBlocks } from '../../mocks/mockData.js';
+import { isSupabaseConfigured, loadAppStateFromSupabase, loginEmployeePortal, loginManagerPortal, saveAppStateToSupabase, useSupabaseBackend } from '../../services/supabase/index.js';
 
 const AppStateContext = createContext(null);
 const STORAGE_KEY = 'amazon-schedule-ui/state';
@@ -222,8 +223,22 @@ function buildEmployeesById(employees = []) {
   return new Map(employees.map((employee) => [employee.id, employee]));
 }
 
+function createStableNumericId(seedInput, fallbackValue = 1) {
+  const normalizedSeed = String(seedInput ?? fallbackValue);
+  let hash = 0;
+
+  for (const character of normalizedSeed) {
+    hash = (hash * 33 + character.charCodeAt(0)) % 1000000;
+  }
+
+  return hash || fallbackValue;
+}
+
 function createDateScopedBlockId(dateKey, blockId, index = 0) {
-  return `${dateKey}::${String(blockId ?? index + 1)}`;
+  const normalizedDateSeed = String(dateKey ?? formatDateKey()).replace(/\D/g, '').slice(-8) || formatDateKey().replace(/\D/g, '');
+  const blockSeed = String(blockId ?? index + 1);
+  const numericSeed = createStableNumericId(blockSeed, index + 1);
+  return Number(`${normalizedDateSeed}${String(numericSeed).padStart(6, '0')}`);
 }
 
 function rotateBlockEmployeeIds(employeeIds = [], rosterIds = [], shiftAmount = 0) {
@@ -707,6 +722,52 @@ function readInitialState() {
   }
 }
 
+function hydrateSupabaseState(remoteState, previousState) {
+  const fallbackState = buildDefaultState();
+  const normalizedEmployees = normalizeEmployees(remoteState?.employees ?? fallbackState.employees);
+  const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
+  const employeesById = buildEmployeesById(normalizedEmployees);
+  const persistedSessionId = Number.isFinite(previousState?.employeePortalSessionId) && allowedEmployeeIds.has(previousState.employeePortalSessionId)
+    ? previousState.employeePortalSessionId
+    : null;
+
+  return {
+    ...fallbackState,
+    version: STATE_VERSION,
+    employees: normalizedEmployees,
+    managerSessionActive: Boolean(previousState?.managerSessionActive),
+    employeePortalSessionId: persistedSessionId,
+    calendarDaySettings: normalizeCalendarDaySettings(remoteState?.calendarDaySettings ?? fallbackState.calendarDaySettings),
+    employeeAvailabilityCalendar: normalizeAvailabilityCalendar(remoteState?.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees),
+    timeBlocks: Array.isArray(remoteState?.timeBlocks)
+      ? sanitizeTimeBlocks(remoteState.timeBlocks, allowedEmployeeIds, employeesById)
+      : fallbackState.timeBlocks,
+    requests: Array.isArray(remoteState?.requests) ? remoteState.requests.map((request) => ({ ...request })) : fallbackState.requests,
+    inventoryItems: Array.isArray(remoteState?.inventoryItems) ? remoteState.inventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
+    inventoryHistory: Array.isArray(remoteState?.inventoryHistory) ? remoteState.inventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
+    issueReports: Array.isArray(remoteState?.issueReports) ? remoteState.issueReports.map((issue) => ({ ...issue })) : fallbackState.issueReports,
+    settings: normalizeSettings(remoteState?.settings ?? fallbackState.settings),
+  };
+}
+
+function buildSupabasePersistedState(state) {
+  return {
+    employees: state.employees,
+    calendarDaySettings: state.calendarDaySettings,
+    employeeAvailabilityCalendar: state.employeeAvailabilityCalendar,
+    timeBlocks: state.timeBlocks,
+    requests: state.requests,
+    inventoryItems: state.inventoryItems,
+    inventoryHistory: state.inventoryHistory,
+    issueReports: state.issueReports,
+    settings: state.settings,
+  };
+}
+
+function buildPersistedStateSignature(state) {
+  return JSON.stringify(buildSupabasePersistedState(state));
+}
+
 function mapRequestTitle(type) {
   const titles = {
     'ขอพนักงานเพิ่ม': 'ขอรับพนักงานเพิ่ม',
@@ -719,7 +780,43 @@ function mapRequestTitle(type) {
 
 export function AppStateProvider({ children }) {
   const [state, setState] = useState(readInitialState);
+  const [isSupabaseSyncReady, setIsSupabaseSyncReady] = useState(!useSupabaseBackend || !isSupabaseConfigured);
+  const lastSyncedSignatureRef = useRef(null);
+  const syncTimeoutRef = useRef(null);
   const { calendarDaySettings, employeeAvailabilityCalendar, employeePortalSessionId, employees, inventoryHistory, inventoryItems, issueReports, managerSessionActive, requests, settings, timeBlocks } = state;
+
+  useEffect(() => {
+    if (!useSupabaseBackend || !isSupabaseConfigured) {
+      return undefined;
+    }
+
+    let isActive = true;
+
+    loadAppStateFromSupabase()
+      .then((remoteState) => {
+        if (!isActive) {
+          return;
+        }
+
+        setState((currentState) => {
+          const hydratedState = hydrateSupabaseState(remoteState, currentState);
+          lastSyncedSignatureRef.current = buildPersistedStateSignature(hydratedState);
+          return hydratedState;
+        });
+        setIsSupabaseSyncReady(true);
+      })
+      .catch((error) => {
+        console.error('Failed to load app state from Supabase.', error);
+        if (isActive) {
+          lastSyncedSignatureRef.current = buildPersistedStateSignature(state);
+          setIsSupabaseSyncReady(true);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -728,6 +825,37 @@ export function AppStateProvider({ children }) {
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
+
+  useEffect(() => {
+    if (!useSupabaseBackend || !isSupabaseConfigured || !isSupabaseSyncReady) {
+      return undefined;
+    }
+
+    const nextSignature = buildPersistedStateSignature(state);
+    if (nextSignature === lastSyncedSignatureRef.current) {
+      return undefined;
+    }
+
+    if (syncTimeoutRef.current) {
+      window.clearTimeout(syncTimeoutRef.current);
+    }
+
+    syncTimeoutRef.current = window.setTimeout(() => {
+      saveAppStateToSupabase(buildSupabasePersistedState(state))
+        .then(() => {
+          lastSyncedSignatureRef.current = nextSignature;
+        })
+        .catch((error) => {
+          console.error('Failed to sync app state to Supabase.', error);
+        });
+    }, 500);
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        window.clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [isSupabaseSyncReady, state]);
 
   const addEmployeesToBlock = (blockId, selectedIds) => {
     const block = timeBlocks.find((entry) => entry.id === blockId);
@@ -1380,7 +1508,25 @@ export function AppStateProvider({ children }) {
     return employee;
   };
 
-  const employeePortalLogin = (phone, password) => {
+  const employeePortalLogin = async (phone, password) => {
+    if (useSupabaseBackend && isSupabaseConfigured) {
+      const matchedEmployee = await loginEmployeePortal(phone, password);
+
+      if (!matchedEmployee) {
+        return null;
+      }
+
+      setState((currentState) => ({
+        ...currentState,
+        employees: currentState.employees.some((employee) => employee.id === matchedEmployee.id)
+          ? currentState.employees.map((employee) => (employee.id === matchedEmployee.id ? { ...employee, ...matchedEmployee } : employee))
+          : normalizeEmployees([...currentState.employees, matchedEmployee]),
+        employeePortalSessionId: matchedEmployee.id,
+      }));
+
+      return matchedEmployee;
+    }
+
     const normalizedPhone = normalizeEmployeeCredential(phone);
     const normalizedPassword = normalizeEmployeeCredential(password);
     const matchedEmployee = employees.find((employee) => employee.active !== false && normalizeEmployeeCredential(employee.phone) === normalizedPhone && normalizeEmployeeCredential(employee.password) === normalizedPassword);
@@ -1404,7 +1550,22 @@ export function AppStateProvider({ children }) {
     }));
   };
 
-  const managerLogin = (phone, password) => {
+  const managerLogin = async (phone, password) => {
+    if (useSupabaseBackend && isSupabaseConfigured) {
+      const isLoggedIn = await loginManagerPortal(phone, password);
+
+      if (!isLoggedIn) {
+        return false;
+      }
+
+      setState((currentState) => ({
+        ...currentState,
+        managerSessionActive: true,
+      }));
+
+      return true;
+    }
+
     const normalizedPhone = normalizeEmployeeCredential(phone);
     const normalizedPassword = normalizeEmployeeCredential(password);
     const managerPhone = normalizeEmployeeCredential(settings.managerPhone);

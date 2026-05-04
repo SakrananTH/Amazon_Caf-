@@ -1,10 +1,15 @@
-insert into public.app_settings (id, store_name, manager_phone, manager_password, preferred_view)
-values (true, 'Amazon Cafe สาขา CW Tower', '0800000004', 'AMZ0004', 'desktop')
+insert into public.app_settings (id, store_name, manager_name, manager_phone, manager_password, preferred_view, shortage_threshold, notifications_enabled, auto_close_resolved_requests, last_saved_at)
+values (true, 'Amazon Cafe สาขา CW Tower', 'ผู้จัดการร้าน', '0800000004', 'AMZ0004', 'desktop', '1', true, false, null)
 on conflict (id) do update
 set store_name = excluded.store_name,
+  manager_name = excluded.manager_name,
     manager_phone = excluded.manager_phone,
     manager_password = excluded.manager_password,
-    preferred_view = excluded.preferred_view;
+  preferred_view = excluded.preferred_view,
+  shortage_threshold = excluded.shortage_threshold,
+  notifications_enabled = excluded.notifications_enabled,
+  auto_close_resolved_requests = excluded.auto_close_resolved_requests,
+  last_saved_at = excluded.last_saved_at;
 
 insert into public.employees (id, employee_code, name, role, avatar, phone, password, active, availability_status, skills)
 values

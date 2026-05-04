@@ -30,3 +30,10 @@ backend/
 
 - ฝั่งเว็บมี service layer เตรียมไว้ที่ `src/services/supabase`
 - ถ้าจะเริ่มเชื่อมจริง ให้ตั้งค่า `.env` จาก `.env.example` แล้วค่อยเรียกใช้ loader ใน service layer เพื่อดึงข้อมูลจาก Supabase
+
+## Auth และ RLS
+
+- ฝั่งเว็บตรวจ login ของ manager และ employee ผ่าน SQL RPC (`authenticate_manager_portal`, `authenticate_employee_portal`) แทนการดึงตาราง credential มาตรวจใน browser ตรง ๆ
+- migration ที่เพิ่ม RPC auth อยู่ใน `backend/supabase/migrations/202605040003_auth_rpc.sql`
+- RLS ปัจจุบันยังเป็นแบบ permissive เพื่อให้ static frontend ใช้งานต่อได้กับ publishable key เดิม
+- ถ้าต้องการแยกสิทธิ์ manager/employee แบบบังคับจริง ควรต่อยอดด้วย Supabase Auth หรือย้าย write path ไปอยู่หลัง server-side boundary

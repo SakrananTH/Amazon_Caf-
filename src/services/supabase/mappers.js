@@ -128,10 +128,12 @@ export function mapInventoryHistoryRows(rows) {
   return rows.map((row) => ({
     id: Number(row.id),
     itemId: Number(row.item_id),
+    itemName: '',
     label: row.label,
     detail: row.detail,
     actorName: row.actor_name ?? '',
     at: formatDateTimeDisplay(row.logged_at),
+    action: row.action_type ?? '',
     actionType: row.action_type ?? '',
   }));
 }
@@ -150,8 +152,13 @@ export function mapIssueRows(rows) {
 export function mapSettingsRow(row) {
   return {
     storeName: row?.store_name ?? 'Amazon Cafe',
+    managerName: row?.manager_name ?? 'ผู้จัดการร้าน',
     managerPhone: row?.manager_phone ?? '',
     managerPassword: row?.manager_password ?? '',
     preferredView: row?.preferred_view ?? 'desktop',
+    shortageThreshold: row?.shortage_threshold ?? '1',
+    notificationsEnabled: row?.notifications_enabled ?? true,
+    autoCloseResolvedRequests: row?.auto_close_resolved_requests ?? false,
+    lastSavedAt: row?.last_saved_at ?? '',
   };
 }
