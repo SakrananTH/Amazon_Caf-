@@ -1,0 +1,442 @@
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import DesktopSchedule from '../features/manager/DesktopSchedule.jsx';
+import DesktopWorkspace from '../features/manager/DesktopWorkspace.jsx';
+import EmployeeHolidayPlanner from '../features/manager/EmployeeHolidayPlanner.jsx';
+import { EmployeesPage, HomePage, InventoryCatalogPage, ManagerLoginPage, ManagerNotificationsPage, ReportsPage, SettingsPage } from '../features/manager/ManagementPages.jsx';
+import { EmployeeMobileHomePage, EmployeeMobileInventoryPage, EmployeeMobileIssuePage, EmployeeMobileLoginPage, EmployeeMobileShiftPage } from '../features/employee/MobileEmployeePortal.jsx';
+import { AddEmployeeSheet, RemoveConfirm, RequestHelp, ScheduleBlockEditor } from '../features/manager/ModalScreens.jsx';
+import WeeklySchedulePage from '../features/manager/WeeklySchedulePage.jsx';
+import { routePaths } from './routes.js';
+import { isEmployeeScheduleEligible, useAppState } from './state/AppStateContext.jsx';
+
+function findDefaultAddBlock(blocks) {
+  return blocks.find((block) => block.employeeIds.length < block.required) ?? blocks[0] ?? null;
+}
+
+function findDefaultRemoveBlock(blocks) {
+  return blocks.find((block) => block.employeeIds.length) ?? blocks[0] ?? null;
+}
+
+function ManagerDesktopGate({ children }) {
+  const location = useLocation();
+  const { managerSessionActive } = useAppState();
+
+  if (!managerSessionActive) {
+    return <Navigate to={routePaths.managerLogin} replace state={{ returnTo: location.pathname, portalMessage: 'กรุณาเข้าสู่ระบบผู้จัดการก่อนใช้งาน' }} />;
+  }
+
+  return children;
+}
+
+function ManagerLoginRoutePage() {
+  return (
+    <div className="screen-stage desktop">
+      <ManagerLoginPage />
+    </div>
+  );
+}
+
+function HomeRoutePage() {
+  return (
+    <ManagerDesktopGate>
+      <div className="screen-stage desktop">
+        <HomePage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function EmployeeHomeRoutePage() {
+  return (
+    <div className="screen-stage employee-mobile">
+      <EmployeeMobileHomePage />
+    </div>
+  );
+}
+
+function EmployeeLoginRoutePage() {
+  return (
+    <div className="screen-stage employee-mobile">
+      <EmployeeMobileLoginPage />
+    </div>
+  );
+}
+
+function DesktopSchedulePage() {
+  const { autoAssignEmployeesToBlock, copyDaySchedule, employeeAvailabilityCalendar, employees, moveEmployeeToBlock, timeBlocks } = useAppState();
+  return (
+    <ManagerDesktopGate>
+      <div className="screen-stage desktop">
+        <DesktopSchedule blocks={timeBlocks} employees={employees} employeeAvailabilityCalendar={employeeAvailabilityCalendar} moveEmployeeToBlock={moveEmployeeToBlock} autoAssignEmployeesToBlock={autoAssignEmployeesToBlock} copyDaySchedule={copyDaySchedule} />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function LeavePlannerRoutePage() {
+  return (
+    <ManagerDesktopGate>
+      <div className="screen-stage desktop">
+        <EmployeeHolidayPlanner />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function WeeklyScheduleRoutePage() {
+  return (
+    <ManagerDesktopGate>
+      <div className="screen-stage desktop">
+        <WeeklySchedulePage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function EmployeesRoutePage() {
+  return (
+    <ManagerDesktopGate>
+      <div className="screen-stage desktop">
+        <EmployeesPage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function EmployeeScheduleRoutePage() {
+  return (
+    <div className="screen-stage employee-mobile">
+      <EmployeeMobileShiftPage />
+    </div>
+  );
+}
+
+function EmployeeInventoryRoutePage() {
+  return <Navigate to={routePaths.employeeInventoryCheck} replace />;
+}
+
+function EmployeeInventoryCheckRoutePage() {
+  return (
+    <div className="screen-stage employee-mobile">
+      <EmployeeMobileInventoryPage inventoryView="check" />
+    </div>
+  );
+}
+
+function EmployeeInventoryIncomingRoutePage() {
+  return (
+    <div className="screen-stage employee-mobile">
+      <EmployeeMobileInventoryPage inventoryView="incoming" />
+    </div>
+  );
+}
+
+function AddEmployeePage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { addEmployeesToBlock, employeeAvailabilityCalendar, employees, timeBlocks } = useAppState();
+  const returnTo = location.state?.returnTo ?? routePaths.desktopSchedule;
+  const selectedDateKey = location.state?.selectedDateKey ?? null;
+  const block = timeBlocks.find((entry) => entry.id === location.state?.blockId) ?? findDefaultAddBlock(timeBlocks);
+  const availableEmployees = block ? employees.filter((employee) => !block.employeeIds.includes(employee.id) && isEmployeeScheduleEligible(employee, selectedDateKey, employeeAvailabilityCalendar)) : [];
+
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage standalone-modal">
+        <AddEmployeeSheet
+          employees={availableEmployees}
+          block={block}
+          onApply={(selectedIds) => {
+            if (!block) {
+              return '';
+            }
+
+            const updatedBlock = addEmployeesToBlock(block.id, selectedIds);
+            return updatedBlock ? `เพิ่มพนักงาน ${selectedIds.length} คนเข้าสู่ช่วง ${updatedBlock.time}` : '';
+          }}
+          onClose={() => navigate(returnTo, { state: { selectedDateKey } })}
+        />
+	  </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function RemoveEmployeePage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { employees, removeEmployeeFromBlock, timeBlocks } = useAppState();
+  const returnTo = location.state?.returnTo ?? routePaths.desktopSchedule;
+  const selectedDateKey = location.state?.selectedDateKey ?? null;
+  const block = timeBlocks.find((entry) => entry.id === location.state?.blockId) ?? findDefaultRemoveBlock(timeBlocks);
+  const employeeId = location.state?.employeeId ?? block?.employeeIds[0];
+  const employee = employees.find((entry) => entry.id === employeeId);
+
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage standalone-modal remove-flow">
+        <RemoveConfirm
+          block={block}
+          employee={employee}
+          onCancel={() => navigate(returnTo, { state: { selectedDateKey } })}
+          onConfirm={() => {
+            if (!block || !employee) {
+              return '';
+            }
+
+            const updatedBlock = removeEmployeeFromBlock(block.id, employee.id);
+            return updatedBlock ? `${employee.name} ถูกนำออกจากช่วง ${updatedBlock.time}` : '';
+          }}
+        />
+	  </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function RequestHelpPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { createRequest, timeBlocks } = useAppState();
+  const returnTo = location.state?.returnTo ?? routePaths.desktopSchedule;
+  const block = timeBlocks.find((entry) => entry.id === location.state?.blockId) ?? findDefaultAddBlock(timeBlocks);
+  const shortage = block ? Math.max(block.required - block.employeeIds.length, 0) : 0;
+
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage standalone-modal">
+        <RequestHelp
+          defaultDetail={location.state?.defaultDetail ?? (block ? `ช่วงเวลา ${block.time}\nงานหลัก: ${block.title}\nขาดพนักงาน ${shortage} คน` : '')}
+          defaultType={location.state?.defaultType ?? 'ขอพนักงานเพิ่ม'}
+          onClose={() => navigate(returnTo)}
+          onSubmit={createRequest}
+          onViewRequests={() => navigate(routePaths.myRequests)}
+        />
+	  </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function ScheduleBlockPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { saveTimeBlock, timeBlocks } = useAppState();
+  const returnTo = location.state?.returnTo ?? routePaths.desktopSchedule;
+  const selectedDateKey = location.state?.selectedDateKey ?? null;
+  const block = timeBlocks.find((entry) => entry.id === location.state?.blockId) ?? null;
+
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage standalone-modal">
+        <ScheduleBlockEditor
+          block={block}
+          onClose={() => navigate(returnTo, { state: { selectedDateKey } })}
+          onSubmit={(payload) => {
+            const updatedBlock = saveTimeBlock({ ...payload, dateKey: block?.dateKey ?? selectedDateKey });
+            if (!updatedBlock) {
+              return '';
+            }
+
+            return block ? `อัปเดต ${updatedBlock.time} • ${updatedBlock.title} แล้ว` : `เพิ่มช่วง ${updatedBlock.time} • ${updatedBlock.title} แล้ว`;
+          }}
+        />
+	  </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function MyRequestsPage() {
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage desktop">
+        <ManagerNotificationsPage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function EmployeeRequestsPage() {
+  return (
+    <div className="screen-stage employee-mobile">
+      <EmployeeMobileIssuePage />
+    </div>
+  );
+}
+
+function ReportsRoutePage() {
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage desktop">
+        <ReportsPage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function InventoryCatalogRoutePage() {
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage desktop">
+        <InventoryCatalogPage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+function SettingsRoutePage() {
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage desktop">
+        <SettingsPage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
+export const screenCatalog = [
+  {
+    id: 'manager-login',
+    path: routePaths.managerLogin,
+    title: 'เข้าสู่ระบบผู้จัดการ',
+    description: 'กรอกเบอร์โทรศัพท์และรหัสผ่านของผู้จัดการก่อนเข้าใช้งานระบบจัดการ',
+    component: ManagerLoginRoutePage,
+  },
+  {
+    id: 'home',
+    path: routePaths.home,
+    title: 'หน้าหลัก',
+    description: 'หน้าหลักของผู้จัดการร้านพร้อมตารางงานประจำวัน',
+    component: HomeRoutePage,
+  },
+  {
+    id: 'employee-login',
+    path: routePaths.employeeLogin,
+    title: 'เข้าสู่ระบบพนักงาน',
+    description: 'กรอกเบอร์โทรศัพท์และรหัสผ่านก่อนเข้าใช้งานโหมดพนักงาน',
+    component: EmployeeLoginRoutePage,
+  },
+  {
+    id: 'employee-home',
+    path: routePaths.employeeHome,
+    title: 'หน้าพนักงาน',
+    description: 'หน้าหลักพนักงานแบบมือถือสำหรับดูกะ สต็อก และปัญหา',
+    component: EmployeeHomeRoutePage,
+  },
+  {
+    id: 'desktop-schedule',
+    path: routePaths.desktopSchedule,
+    title: 'ตารางงาน',
+    description: 'มุมมองหลักของผู้จัดการร้านสำหรับดูภาพรวมทั้งวัน',
+    component: DesktopSchedulePage,
+  },
+  {
+    id: 'leave-planner',
+    path: routePaths.leavePlanner,
+    title: 'ปฏิทินวันหยุด',
+    description: 'กำหนดวันลา วันหยุดไม่ได้ และวัน 2 แรง แยกจากหน้าตารางหลัก',
+    component: LeavePlannerRoutePage,
+  },
+  {
+    id: 'weekly-schedule',
+    path: routePaths.weeklySchedule,
+    title: 'เวลาเข้างาน',
+    description: 'มุมมองรายสัปดาห์สำหรับดู แก้ไข และลบช่วงงาน',
+    component: WeeklyScheduleRoutePage,
+  },
+  {
+    id: 'employee-schedule',
+    path: routePaths.employeeSchedule,
+    title: 'กะของฉัน',
+    description: 'มุมมองกะของพนักงานแบบมือถือ',
+    component: EmployeeScheduleRoutePage,
+  },
+  {
+    id: 'employee-inventory',
+    path: routePaths.employeeInventory,
+    title: 'สต็อก',
+    description: 'redirect ไปหน้าตรวจสต็อกของพนักงาน',
+    component: EmployeeInventoryRoutePage,
+  },
+  {
+    id: 'employee-inventory-check',
+    path: routePaths.employeeInventoryCheck,
+    title: 'เช็กสต็อก',
+    description: 'ตรวจจำนวนของคงเหลือและวันหมดอายุผ่านมือถือ',
+    component: EmployeeInventoryCheckRoutePage,
+  },
+  {
+    id: 'employee-inventory-incoming',
+    path: routePaths.employeeInventoryIncoming,
+    title: 'ของมาใหม่',
+    description: 'ดูของที่รับเข้าใหม่และเพิ่มสินค้าใหม่ผ่านมือถือ',
+    component: EmployeeInventoryIncomingRoutePage,
+  },
+  {
+    id: 'manage-schedule-block',
+    path: routePaths.manageScheduleBlock,
+    title: 'จัดการข้อมูลงาน',
+    description: 'ฟอร์มสร้างและแก้ไขช่วงงานในตาราง',
+    component: ScheduleBlockPage,
+  },
+  {
+    id: 'employees',
+    path: routePaths.employees,
+    title: 'พนักงาน',
+    description: 'จัดการรายชื่อพนักงานและสถานะการลงกะในระบบ',
+    component: EmployeesRoutePage,
+  },
+  {
+    id: 'add-employee',
+    path: routePaths.addEmployee,
+    title: 'เพิ่มพนักงาน',
+    description: 'หน้าสำหรับเลือกและเพิ่มพนักงานเข้าช่วงเวลา',
+    component: AddEmployeePage,
+  },
+  {
+    id: 'remove-employee',
+    path: routePaths.removeEmployee,
+    title: 'นำพนักงานออก',
+    description: 'หน้า confirm ก่อนนำพนักงานออกจากช่วงเวลา',
+    component: RemoveEmployeePage,
+  },
+  {
+    id: 'request-help',
+    path: routePaths.requestHelp,
+    title: 'แจ้งปัญหา / ขอความช่วยเหลือ',
+    description: 'ฟอร์มแจ้งปัญหาหรือขอพนักงานเพิ่มเติมพร้อมแนบรูปได้',
+    component: RequestHelpPage,
+  },
+  {
+    id: 'my-requests',
+    path: routePaths.myRequests,
+    title: 'คำขอของฉัน',
+    description: 'สรุปรายการคำขอทั้งหมดพร้อมสถานะการดำเนินการ',
+    component: MyRequestsPage,
+  },
+  {
+    id: 'employee-requests',
+    path: routePaths.employeeRequests,
+    title: 'แจ้งปัญหา',
+    description: 'หน้าพนักงานสำหรับแจ้งปัญหาและติดตามสถานะ',
+    component: EmployeeRequestsPage,
+  },
+  {
+    id: 'reports',
+    path: routePaths.reports,
+    title: 'รายงาน',
+    description: 'สรุป coverage และสถานะกำลังคนรายช่วงเวลา',
+    component: ReportsRoutePage,
+  },
+  {
+    id: 'inventory-catalog',
+    path: routePaths.inventoryCatalog,
+    title: 'คลังสต็อก',
+    description: 'หน้ารายการสินค้าในคลังพร้อมค้นหาและกรองตามหมวดหมู่',
+    component: InventoryCatalogRoutePage,
+  },
+  {
+    id: 'settings',
+    path: routePaths.settings,
+    title: 'ตั้งค่า',
+    description: 'ตั้งค่าข้อมูลสาขาและการแจ้งเตือนของระบบ',
+    component: SettingsRoutePage,
+  },
+];
