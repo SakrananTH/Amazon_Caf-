@@ -4184,6 +4184,12 @@ a, button {
   margin-bottom: 18px;
 }
 
+.flow-head > div,
+.sheet-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
 .flow-subtitle {
   margin: 6px 0 0;
   font-size: 13px;
@@ -4192,10 +4198,12 @@ a, button {
 
 .icon-button {
   width: 36px;
-  margin: 0 auto var(--space-md);
+  margin: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  align-self: flex-start;
   border-radius: 999px;
   gap: 12px;
   color: var(--text-muted);

@@ -3,7 +3,7 @@ import { ArrowRight, BarChart3, Bell, Clock3, Copy, Eye, EyeOff, LogIn, LockKeyh
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import DesktopWorkspace, { employeeNavItems } from './DesktopWorkspace.jsx';
 import EmployeeChip, { buildRoleMetadataSkills, employeeChipLegendItems, employeeRoleOptions, getRoleClassName, getRolePresentation, stripRoleMetadataSkills } from '../shared/EmployeeChip.jsx';
-import { MAX_EMPLOYEES, computeBlockStatus, employeeAvailabilityOptions, formatDateKey, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeScheduleEligible, useAppState } from '../../app/state/AppStateContext.jsx';
+import { MAX_EMPLOYEES, computeBlockStatus, employeeAvailabilityOptions, formatDateKey, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeScheduleEligible, isManagerRole, useAppState } from '../../app/state/AppStateContext.jsx';
 import { routePaths } from '../../app/routes.js';
 
 function getBlockCoverage(block, employeesById, dateKey, availabilityCalendar) {
@@ -200,12 +200,13 @@ export function HomePage() {
   const sortedBlocks = useMemo(() => [...getTimeBlocksForDate(timeBlocks, todayDateKey)].sort(sortBlocksBySchedule), [timeBlocks, todayDateKey]);
   const nextBlocks = sortedBlocks.slice(0, 2);
   const assignedEmployees = new Set(sortedBlocks.flatMap((block) => block.employeeIds.filter((employeeId) => isEmployeeScheduleEligible(employees.find((employee) => employee.id === employeeId), todayDateKey, employeeAvailabilityCalendar))));
+  const rosterEmployees = employees.filter((employee) => !isManagerRole(employee.role));
   const activeEmployees = employees.filter((employee) => isEmployeeScheduleEligible(employee, todayDateKey, employeeAvailabilityCalendar));
   const { expiringItems, lowStockItems, openIssues, priorityAlerts } = useMemo(() => buildManagerOpsSummary(inventoryItems, issueReports), [inventoryItems, issueReports]);
   const focusAlerts = priorityAlerts.slice(0, 3);
   const compactAlerts = priorityAlerts.slice(0, 2);
   const spotlightItem = expiringItems[0] ?? lowStockItems[0] ?? null;
-  const coveragePercent = employees.length ? Math.round((activeEmployees.length / employees.length) * 100) : 0;
+  const coveragePercent = rosterEmployees.length ? Math.round((activeEmployees.length / rosterEmployees.length) * 100) : 0;
 
   const getAssignedEmployees = (employeeIds) => employeeIds
     .map((employeeId) => employees.find((employee) => employee.id === employeeId))
@@ -244,7 +245,7 @@ export function HomePage() {
           <aside className="ops-hero-aside">
             <div className="ops-aside-card emphasis home-emphasis-card">
               <span>ทีมพร้อมใช้งานวันนี้</span>
-              <strong>{activeEmployees.length}/{employees.length} คน</strong>
+              <strong>{activeEmployees.length}/{rosterEmployees.length} คน</strong>
               <small>ครอบคลุมกำลังคน {coveragePercent}% • ลงกะจริง {assignedEmployees.size} คน</small>
             </div>
 
