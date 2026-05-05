@@ -308,7 +308,7 @@ export function HomePage() {
           <div className="panel-head">
             <div>
               <h3>กะที่กำลังจะถึง</h3>
-              <p>ดูช่วงงานถัดไปพร้อมคนที่ลงจริงและเปิดตารางได้ทันที</p>
+              <p>ดูรอบงานถัดไปพร้อมคนที่ลงจริงและเปิดตารางได้ทันที</p>
             </div>
             <Users size={18} className="panel-accent" />
           </div>
@@ -328,7 +328,7 @@ export function HomePage() {
                 <Link className="inline-action" to={routePaths.desktopSchedule}>เปิดตาราง</Link>
               </div>
             ))}
-            {!nextBlocks.length ? <div className="empty-card">ยังไม่มีช่วงงานในระบบ</div> : null}
+            {!nextBlocks.length ? <div className="empty-card">ยังไม่มีรอบงานในระบบ</div> : null}
           </div>
         </article>
         </section>
@@ -394,7 +394,7 @@ export function EmployeeSchedulePage() {
           <div className="panel-head">
             <div>
               <h3>รายละเอียดกะของฉัน</h3>
-              <p>สรุปช่วงเวลา รายการงาน และสถานะในแต่ละช่วง</p>
+              <p>สรุปรอบงาน รายการงาน และสถานะในแต่ละรอบ</p>
             </div>
             <PencilLine size={18} className="panel-accent" />
           </div>
@@ -425,7 +425,7 @@ export function EmployeeSchedulePage() {
           <div className="panel-head">
             <div>
               <h3>ทีมที่ทำงานร่วมกัน</h3>
-              <p>ดูเพื่อนร่วมกะจากช่วงงานที่คุณได้รับมอบหมาย</p>
+              <p>ดูเพื่อนร่วมกะจากรอบงานที่คุณได้รับมอบหมาย</p>
             </div>
             <Users size={18} className="panel-accent" />
           </div>
@@ -1859,7 +1859,7 @@ export function SettingsPage() {
 
             <label className="checkbox-row">
               <input type="checkbox" name="notificationsEnabled" checked={formState.notificationsEnabled} onChange={handleChange} />
-              <span>เปิดการแจ้งเตือนเมื่อช่วงเวลาใดคนไม่ครบ</span>
+              <span>เปิดการแจ้งเตือนเมื่อรอบงานใดคนไม่ครบ</span>
             </label>
 
             <label className="checkbox-row">

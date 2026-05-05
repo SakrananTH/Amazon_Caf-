@@ -1,5 +1,43 @@
 import { useMemo, useState } from 'react';
 import { Camera, CheckCircle2, Search, TriangleAlert, X } from 'lucide-react';
+import { buildBlockTimeLabel, getBlockRoundLabel, getBlockStartLabel, getBlockEndLabel, normalizeClockValue } from '../../app/state/AppStateContext.jsx';
+
+const scheduleRoundPresets = [
+  {
+    key: 'morning',
+    label: 'รอบเช้า 06:30 - 16:30',
+    roundLabel: 'รอบเช้า',
+    startTime: '06:30',
+    endTime: '16:30',
+  },
+  {
+    key: 'late',
+    label: 'รอบสาย 07:30 - 17:30',
+    roundLabel: 'รอบสาย',
+    startTime: '07:30',
+    endTime: '17:30',
+  },
+  {
+    key: 'custom',
+    label: 'กำหนดเอง',
+    roundLabel: 'รอบงาน',
+    startTime: '',
+    endTime: '',
+  },
+];
+
+function findScheduleRoundPreset(presetKey = 'custom') {
+  return scheduleRoundPresets.find((preset) => preset.key === presetKey) ?? scheduleRoundPresets[scheduleRoundPresets.length - 1];
+}
+
+function formatBlockRoundSummary(block) {
+  if (!block) {
+    return '';
+  }
+
+  const roundLabel = getBlockRoundLabel(block);
+  return [roundLabel, block.time].filter(Boolean).join(' ');
+}
 
 export function AddEmployeeSheet({ block, employees, onApply, onClose }) {
   const [query, setQuery] = useState('');
@@ -29,7 +67,7 @@ export function AddEmployeeSheet({ block, employees, onApply, onClose }) {
     }
   };
 
-  return <section className="flow-page-shell"><div className="flow-page-card calm-flow-card"><div className="sheet-head flow-head"><div><b>เพิ่มพนักงานเข้ากะ</b><p className="flow-subtitle">เลือกจากรายชื่อที่ยังว่าง แล้วกดยืนยันครั้งเดียว</p></div><button type="button" className="icon-button" onClick={onClose}><X size={16}/></button></div>{block ? <div className="sheet-note calm-note"><strong>{block.time}</strong><span>{block.title}</span></div> : <div className="empty-card compact">ไม่พบช่วงเวลาที่เลือก</div>}{summary ? <div className="form-success"><CheckCircle2 size={20}/><div><strong>อัปเดตกะงานแล้ว</strong><p>{summary}</p></div></div> : <><div className="search-box page-search-box"><Search size={14}/><input className="plain-input" placeholder="ค้นหาชื่อหรือบทบาทพนักงาน" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="selection-caption">เลือกแล้ว {selectedIds.length} คน</div><div className="flow-list calm-flow-list">{filteredEmployees.map((employee) => <button type="button" className={`employee-choice selectable ${selectedIds.includes(employee.id) ? 'selected' : ''}`} key={employee.id} onClick={() => toggleEmployee(employee.id)}><span className="avatar-mini">{employee.avatar}</span><div><b>{employee.name} ({employee.role})</b></div>{selectedIds.includes(employee.id) ? <CheckCircle2 className="checked" size={18}/> : <span className="circle" />}</button>)}</div>{!filteredEmployees.length ? <div className="empty-card compact">ไม่พบพนักงานที่ค้นหา หรือช่วงเวลานี้มีพนักงานครบแล้ว</div> : null}</>}<div className="flow-footer"><button type="button" className="primary-inline flow-submit" onClick={summary ? onClose : handleSubmit} disabled={!summary && !selectedIds.length}>{summary ? 'กลับไปตารางงาน' : `ยืนยันเพิ่ม ${selectedIds.length} คน`}</button></div></div></section>;
+  return <section className="flow-page-shell"><div className="flow-page-card calm-flow-card"><div className="sheet-head flow-head"><div><b>เพิ่มพนักงานเข้ารอบงาน</b><p className="flow-subtitle">เลือกจากรายชื่อที่ยังว่าง แล้วกดยืนยันครั้งเดียว</p></div><button type="button" className="icon-button" onClick={onClose}><X size={16}/></button></div>{block ? <div className="sheet-note calm-note"><strong>{formatBlockRoundSummary(block)}</strong><span>{block.title}</span></div> : <div className="empty-card compact">ไม่พบรอบงานที่เลือก</div>}{summary ? <div className="form-success"><CheckCircle2 size={20}/><div><strong>อัปเดตรอบงานแล้ว</strong><p>{summary}</p></div></div> : <><div className="search-box page-search-box"><Search size={14}/><input className="plain-input" placeholder="ค้นหาชื่อหรือบทบาทพนักงาน" value={query} onChange={(event) => setQuery(event.target.value)} /></div><div className="selection-caption">เลือกแล้ว {selectedIds.length} คน</div><div className="flow-list calm-flow-list">{filteredEmployees.map((employee) => <button type="button" className={`employee-choice selectable ${selectedIds.includes(employee.id) ? 'selected' : ''}`} key={employee.id} onClick={() => toggleEmployee(employee.id)}><span className="avatar-mini">{employee.avatar}</span><div><b>{employee.name} ({employee.role})</b></div>{selectedIds.includes(employee.id) ? <CheckCircle2 className="checked" size={18}/> : <span className="circle" />}</button>)}</div>{!filteredEmployees.length ? <div className="empty-card compact">ไม่พบพนักงานที่ค้นหา หรือรอบนี้มีพนักงานครบแล้ว</div> : null}</>}<div className="flow-footer"><button type="button" className="primary-inline flow-submit" onClick={summary ? onClose : handleSubmit} disabled={!summary && !selectedIds.length}>{summary ? 'กลับไปตารางงาน' : `ยืนยันเพิ่ม ${selectedIds.length} คน`}</button></div></div></section>;
 }
 
 export function RemoveConfirm({ block, employee, onCancel, onConfirm }) {
@@ -42,7 +80,7 @@ export function RemoveConfirm({ block, employee, onCancel, onConfirm }) {
     }
   };
 
-  return <section className="flow-page-shell centered narrow"><div className="confirm-page-card calm-flow-card">{summary ? <div className="confirm-success"><CheckCircle2 size={28}/><b>นำพนักงานออกแล้ว</b><p>{summary}</p></div> : <><b>นำพนักงานออกจากกะ</b><p>ยืนยันการนำ <strong>{employee?.name ?? 'ไม่พบพนักงาน'}</strong> ออกจากช่วงเวลา {block?.time ?? '-'} เพื่อปรับตารางใหม่นะ?</p></>}<div className="modal-actions"><button type="button" onClick={onCancel}>{summary ? 'กลับสู่ตารางงาน' : 'ยกเลิก'}</button>{summary ? null : <button type="button" className="danger-btn" onClick={handleConfirm}>ยืนยันการนำออก</button>}</div></div></section>;
+  return <section className="flow-page-shell centered narrow"><div className="confirm-page-card calm-flow-card">{summary ? <div className="confirm-success"><CheckCircle2 size={28}/><b>นำพนักงานออกแล้ว</b><p>{summary}</p></div> : <><b>นำพนักงานออกจากรอบงาน</b><p>ยืนยันการนำ <strong>{employee?.name ?? 'ไม่พบพนักงาน'}</strong> ออกจาก {formatBlockRoundSummary(block) || 'รอบงานนี้'} เพื่อปรับตารางใหม่นะ?</p></>}<div className="modal-actions"><button type="button" onClick={onCancel}>{summary ? 'กลับสู่ตารางงาน' : 'ยกเลิก'}</button>{summary ? null : <button type="button" className="danger-btn" onClick={handleConfirm}>ยืนยันการนำออก</button>}</div></div></section>;
 }
 
 export function RequestHelp({ defaultDetail, defaultType, onClose, onSubmit, onViewRequests }) {
@@ -72,9 +110,13 @@ export function RequestHelp({ defaultDetail, defaultType, onClose, onSubmit, onV
 
 export function ScheduleBlockEditor({ block, onClose, onSubmit }) {
   const isEditing = Boolean(block?.id);
+  const initialPresetKey = findScheduleRoundPreset(block?.roundPresetKey).key;
   const [formState, setFormState] = useState({
     id: block?.id ?? null,
-    time: block?.time ?? '',
+    roundPresetKey: initialPresetKey,
+    roundLabel: getBlockRoundLabel(block),
+    startTime: getBlockStartLabel(block),
+    endTime: getBlockEndLabel(block),
     title: block?.title ?? '',
     required: String(block?.required ?? 1),
     tasksText: block?.tasks?.join('\n') ?? '',
@@ -83,6 +125,27 @@ export function ScheduleBlockEditor({ block, onClose, onSubmit }) {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+
+    if (name === 'roundPresetKey') {
+      const preset = findScheduleRoundPreset(value);
+      setFormState((currentState) => ({
+        ...currentState,
+        roundPresetKey: preset.key,
+        roundLabel: preset.key === 'custom' ? currentState.roundLabel || preset.roundLabel : preset.roundLabel,
+        startTime: preset.startTime || currentState.startTime,
+        endTime: preset.endTime || currentState.endTime,
+      }));
+      return;
+    }
+
+    if (name === 'startTime' || name === 'endTime') {
+      setFormState((currentState) => ({
+        ...currentState,
+        [name]: normalizeClockValue(value) || value,
+      }));
+      return;
+    }
+
     setFormState((currentState) => ({
       ...currentState,
       [name]: value,
@@ -92,7 +155,11 @@ export function ScheduleBlockEditor({ block, onClose, onSubmit }) {
   const handleSubmit = () => {
     const result = onSubmit({
       id: formState.id,
-      time: formState.time,
+      roundPresetKey: formState.roundPresetKey,
+      roundLabel: formState.roundLabel,
+      startTime: formState.startTime,
+      endTime: formState.endTime,
+      time: buildBlockTimeLabel(formState.startTime, formState.endTime),
       title: formState.title,
       required: formState.required,
       tasks: formState.tasksText.split('\n'),
@@ -103,7 +170,10 @@ export function ScheduleBlockEditor({ block, onClose, onSubmit }) {
     }
   };
 
-  return <section className="flow-page-shell"><div className="flow-page-card form-page-card calm-flow-card"><div className="sheet-head flow-head"><div><b>{isEditing ? 'แก้ไขข้อมูลงาน' : 'เพิ่มช่วงงานใหม่'}</b><p className="flow-subtitle">กำหนดเวลา งานหลัก และจำนวนคนที่ต้องใช้ในฟอร์มเดียว</p></div><button type="button" className="icon-button" onClick={onClose}><X size={16}/></button></div>{summary ? <div className="form-success"><CheckCircle2 size={20}/><div><strong>{isEditing ? 'อัปเดตช่วงงานแล้ว' : 'สร้างช่วงงานแล้ว'}</strong><p>{summary}</p></div></div> : <><div className="form-grid compact-form-grid"><label className="field-group"><span>ช่วงเวลา</span><input className="text-input" name="time" value={formState.time} onChange={handleChange} placeholder="เช่น 06:30 - 09:30" /></label><label className="field-group"><span>จำนวนคนที่ต้องใช้</span><input className="text-input" name="required" type="number" min="1" value={formState.required} onChange={handleChange} /></label><label className="field-group form-grid-full"><span>ชื่องาน</span><input className="text-input" name="title" value={formState.title} onChange={handleChange} placeholder="เช่น เปิดร้าน" /></label><label className="field-group form-grid-full"><span>รายการงาน</span><textarea className="textarea-box textarea-control" name="tasksText" value={formState.tasksText} onChange={handleChange} placeholder="หนึ่งบรรทัดต่อหนึ่งงาน เช่น&#10;เปิดเครื่องกาแฟ&#10;เตรียมวัตถุดิบ" /></label></div>{isEditing ? <div className="compact-editor-note">พนักงานในช่วงนี้จะคงอยู่เหมือนเดิม ระบบจะอัปเดตเฉพาะข้อมูลงานและจำนวนคน</div> : null}</>}<div className="flow-footer"><button type="button" className="primary-inline flow-submit" onClick={summary ? onClose : handleSubmit} disabled={!summary && (!formState.time.trim() || !formState.title.trim() || !formState.tasksText.trim())}>{summary ? 'กลับไปตารางงาน' : isEditing ? 'บันทึกข้อมูลงาน' : 'สร้างช่วงงาน'}</button></div></div></section>;
+  const roundPreviewLabel = [formState.roundLabel.trim(), buildBlockTimeLabel(formState.startTime, formState.endTime)].filter(Boolean).join(' ');
+  const submitDisabled = !summary && (!formState.roundLabel.trim() || !normalizeClockValue(formState.startTime) || !normalizeClockValue(formState.endTime) || !formState.title.trim() || Number(formState.required) <= 0);
+
+  return <section className="flow-page-shell"><div className="flow-page-card form-page-card calm-flow-card"><div className="sheet-head flow-head"><div><b>{isEditing ? 'แก้ไขรอบงาน' : 'เพิ่มรอบงานใหม่'}</b><p className="flow-subtitle">เลือกรอบงานสำเร็จรูป แล้วปรับเวลาเข้า เวลาเลิก และหน้าที่ได้ในฟอร์มเดียว</p></div><button type="button" className="icon-button" onClick={onClose}><X size={16}/></button></div>{summary ? <div className="form-success"><CheckCircle2 size={20}/><div><strong>{isEditing ? 'อัปเดตรอบงานแล้ว' : 'สร้างรอบงานแล้ว'}</strong><p>{summary}</p></div></div> : <><div className="compact-editor-note schedule-round-preview-note"><strong>{roundPreviewLabel || 'เลือกรอบงานก่อนบันทึก'}</strong><span>เลือกรอบเช้าหรือรอบสายเพื่อให้ระบบเติมเวลาเข้าและเวลาเลิกให้อัตโนมัติ</span></div><div className="form-grid compact-form-grid"><label className="field-group form-grid-full"><span>เลือกรอบงาน</span><select className="select-control" name="roundPresetKey" value={formState.roundPresetKey} onChange={handleChange}>{scheduleRoundPresets.map((preset) => <option key={preset.key} value={preset.key}>{preset.label}</option>)}</select></label><label className="field-group"><span>เวลาเข้า</span><input className="text-input" type="time" name="startTime" value={formState.startTime} onChange={handleChange} /></label><label className="field-group"><span>เวลาเลิกงาน</span><input className="text-input" type="time" name="endTime" value={formState.endTime} onChange={handleChange} /></label><label className="field-group form-grid-full"><span>ชื่อรอบงาน</span><input className="text-input" name="roundLabel" value={formState.roundLabel} onChange={handleChange} placeholder="เช่น รอบเช้า" /></label><label className="field-group"><span>จำนวนพนักงานที่ต้องใช้</span><input className="text-input" name="required" type="number" min="1" value={formState.required} onChange={handleChange} /></label><label className="field-group form-grid-full"><span>ชื่องาน / หน้าที่</span><input className="text-input" name="title" value={formState.title} onChange={handleChange} placeholder="เช่น เปิดร้าน" /></label><label className="field-group form-grid-full"><span>รายการงานเพิ่มเติม</span><textarea className="textarea-box textarea-control" name="tasksText" value={formState.tasksText} onChange={handleChange} placeholder="หนึ่งบรรทัดต่อหนึ่งงาน เช่น&#10;เปิดเครื่องกาแฟ&#10;เตรียมวัตถุดิบ" /></label></div>{isEditing ? <div className="compact-editor-note">พนักงานในรอบนี้จะคงอยู่เหมือนเดิม ระบบจะอัปเดตเฉพาะรอบงาน เวลา และจำนวนคนที่ต้องใช้</div> : null}</>}<div className="flow-footer schedule-round-editor-actions"><button type="button" className="ghost-button" onClick={onClose}>ยกเลิก</button><button type="button" className="primary-inline flow-submit" onClick={summary ? onClose : handleSubmit} disabled={submitDisabled}>{summary ? 'กลับไปตารางงาน' : isEditing ? 'บันทึกรอบงาน' : 'สร้างรอบงาน'}</button></div></div></section>;
 }
 
 export function MyRequests({ requests, layout = 'modal' }) {

@@ -152,7 +152,7 @@ function AddEmployeePage() {
             }
 
             const updatedBlock = addEmployeesToBlock(block.id, selectedIds);
-            return updatedBlock ? `เพิ่มพนักงาน ${selectedIds.length} คนเข้าสู่ช่วง ${updatedBlock.time}` : '';
+            return updatedBlock ? `เพิ่มพนักงาน ${selectedIds.length} คนเข้าสู่ ${updatedBlock.roundLabel} ${updatedBlock.time}` : '';
           }}
           onClose={() => navigate(returnTo, { state: { selectedDateKey } })}
         />
@@ -184,7 +184,7 @@ function RemoveEmployeePage() {
             }
 
             const updatedBlock = removeEmployeeFromBlock(block.id, employee.id);
-            return updatedBlock ? `${employee.name} ถูกนำออกจากช่วง ${updatedBlock.time}` : '';
+            return updatedBlock ? `${employee.name} ถูกนำออกจาก ${updatedBlock.roundLabel} ${updatedBlock.time}` : '';
           }}
         />
 	  </div>
@@ -204,7 +204,7 @@ function RequestHelpPage() {
     <ManagerDesktopGate>
 	  <div className="screen-stage standalone-modal">
         <RequestHelp
-          defaultDetail={location.state?.defaultDetail ?? (block ? `ช่วงเวลา ${block.time}\nงานหลัก: ${block.title}\nขาดพนักงาน ${shortage} คน` : '')}
+          defaultDetail={location.state?.defaultDetail ?? (block ? `รอบงาน ${block.time}\nหน้าที่หลัก: ${block.title}\nขาดพนักงาน ${shortage} คน` : '')}
           defaultType={location.state?.defaultType ?? 'ขอพนักงานเพิ่ม'}
           onClose={() => navigate(returnTo)}
           onSubmit={createRequest}
@@ -235,7 +235,7 @@ function ScheduleBlockPage() {
               return '';
             }
 
-            return block ? `อัปเดต ${updatedBlock.time} • ${updatedBlock.title} แล้ว` : `เพิ่มช่วง ${updatedBlock.time} • ${updatedBlock.title} แล้ว`;
+            return block ? `อัปเดต ${updatedBlock.roundLabel} ${updatedBlock.time} • ${updatedBlock.title} แล้ว` : `เพิ่มรอบ ${updatedBlock.roundLabel} ${updatedBlock.time} • ${updatedBlock.title} แล้ว`;
           }}
         />
 	  </div>
@@ -383,7 +383,7 @@ export const screenCatalog = [
     id: 'manage-schedule-block',
     path: routePaths.manageScheduleBlock,
     title: 'จัดการข้อมูลงาน',
-    description: 'ฟอร์มสร้างและแก้ไขช่วงงานในตาราง',
+    description: 'ฟอร์มสร้างและแก้ไขรอบงานในตาราง',
     component: ScheduleBlockPage,
   },
   {
@@ -397,14 +397,14 @@ export const screenCatalog = [
     id: 'add-employee',
     path: routePaths.addEmployee,
     title: 'เพิ่มพนักงาน',
-    description: 'หน้าสำหรับเลือกและเพิ่มพนักงานเข้าช่วงเวลา',
+    description: 'หน้าสำหรับเลือกและเพิ่มพนักงานเข้ารอบงาน',
     component: AddEmployeePage,
   },
   {
     id: 'remove-employee',
     path: routePaths.removeEmployee,
     title: 'นำพนักงานออก',
-    description: 'หน้า confirm ก่อนนำพนักงานออกจากช่วงเวลา',
+    description: 'หน้า confirm ก่อนนำพนักงานออกจากรอบงาน',
     component: RemoveEmployeePage,
   },
   {
@@ -439,7 +439,7 @@ export const screenCatalog = [
     id: 'reports',
     path: routePaths.reports,
     title: 'รายงาน',
-    description: 'สรุป coverage และสถานะกำลังคนรายช่วงเวลา',
+    description: 'สรุป coverage และสถานะกำลังคนรายรอบงาน',
     component: ReportsRoutePage,
   },
   {

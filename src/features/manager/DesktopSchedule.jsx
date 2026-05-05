@@ -4,7 +4,18 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import DesktopWorkspace from './DesktopWorkspace.jsx';
 import EmployeeChip from '../shared/EmployeeChip.jsx';
 import { routePaths } from '../../app/routes.js';
-import { computeBlockStatus, formatDateKey, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeScheduleEligible } from '../../app/state/AppStateContext.jsx';
+import { computeBlockStatus, formatDateKey, getBlockRoundLabel, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeScheduleEligible } from '../../app/state/AppStateContext.jsx';
+
+function getRoundStatusLabel(required, assigned) {
+  const shortage = Math.max(required - assigned, 0);
+  if (!required) {
+    return 'ยังไม่กำหนดคน';
+  }
+  if (!shortage) {
+    return 'ครบแล้ว';
+  }
+  return `ขาด ${shortage} คน`;
+}
 
 export default function DesktopSchedule({ blocks, employees, employeeAvailabilityCalendar, moveEmployeeToBlock, autoAssignEmployeesToBlock, copyDaySchedule }) {
   const navigate = useNavigate();
@@ -104,7 +115,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
             <Copy size={16} /> คัดลอกวันถัดไป
           </button>
           <button type="button" className="primary-inline" onClick={() => navigate(routePaths.manageScheduleBlock, { state: { returnTo: routePaths.desktopSchedule, selectedDateKey: boardDateKey } })}>
-            <Plus size={16} /> เพิ่มช่วงงาน
+            <Plus size={16} /> เพิ่มรอบงาน
           </button>
         </div>
       }
@@ -114,8 +125,8 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
 
         <div className="schedule-board-note panel-card compact-page-bar">
           <div className="compact-page-lead">
-            <strong>จัดการตารางแบบสั้นที่สุด</strong>
-            <p>ลากชื่อพนักงานข้ามคอลัมน์เพื่อย้ายกะ คลิกชื่อเพื่อนำออก และถ้าต้องจัดวันลาให้ไปที่ปุ่มปฏิทินวันหยุดด้านบน</p>
+            <strong>จัดการตารางตามรอบงาน</strong>
+            <p>ลากชื่อพนักงานข้ามคอลัมน์เพื่อย้ายรอบ คลิกชื่อเพื่อนำออก และดูได้ทันทีว่ารอบไหนครบคนหรือยังขาดคน</p>
           </div>
           <div className="compact-page-stats">
             <span className="compact-page-stat">Coverage {coverageRate}%</span>
@@ -125,12 +136,12 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
             <span className={`compact-page-stat ${personalLeaveEmployees.length ? 'warning' : ''}`}>ลากิจ {personalLeaveEmployees.length} คน</span>
             <span className={`compact-page-stat ${sickLeaveEmployees.length ? 'warning' : ''}`}>ลาป่วย {sickLeaveEmployees.length} คน</span>
             <span className={`compact-page-stat ${absentEmployees.length ? 'danger' : ''}`}>ขาด {absentEmployees.length} คน</span>
-            <span className={`compact-page-stat ${shortageBlocks.length ? 'danger' : 'ok'}`}>{shortageBlocks.length ? `ขาด ${shortageBlocks.length} ช่วง` : 'ครบทุกช่วง'}</span>
+            <span className={`compact-page-stat ${shortageBlocks.length ? 'danger' : 'ok'}`}>{shortageBlocks.length ? `ขาด ${shortageBlocks.length} รอบ` : 'ครบทุกรอบ'}</span>
           </div>
         </div>
 
         <div className="schedule-helper-inline">
-          <span>ลากชื่อพนักงานเพื่อย้ายกะได้ทันที</span>
+          <span>ลากชื่อพนักงานเพื่อย้ายรอบได้ทันที</span>
           <span>ปุ่มเพิ่มอัตโนมัติจะเลือกเฉพาะคนที่พร้อมลงกะ และเรียงตามบทบาทงานก่อน</span>
         </div>
 
@@ -151,31 +162,33 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
             const isWarning = status === 'warning';
             const StatusIcon = isDanger ? AlertCircle : isWarning ? TriangleAlert : CheckCircle2;
             const isDropTarget = dragState?.targetBlockId === block.id;
+            const roundLabel = getBlockRoundLabel(block);
 
             return (
               <article key={block.id} className={`column schedule-col ${status}`}>
                 <div className="col-header">
                   <div className="col-time-row">
-                    <h3 className={`col-time ${isDanger ? 'text-danger' : ''}`}>{block.time}</h3>
+                    <h3 className={`col-time ${isDanger ? 'text-danger' : ''}`}>{roundLabel}</h3>
                     <span className={`status-chip ${status}`}>
-                      {status === 'ok' ? 'ปกติ' : status === 'warning' ? 'ใกล้ขาด' : 'ขาดคน'}
+                      {getRoundStatusLabel(required, assigned)}
                     </span>
                   </div>
+                  <div className="col-time-meta">{block.time}</div>
                   <h4 className="col-title">{block.title}</h4>
                   <div className="col-status-row">
                     <div className="col-req-text">ต้องมี {required} คน</div>
                     <StatusIcon size={16} className={isDanger ? 'icon-danger' : isWarning ? 'icon-warning' : 'icon-success'} />
                   </div>
-                  <div className="col-curr-text">วางชื่อ {scheduled} คน • พร้อมจริง {assigned} คน{shortage ? ` • ขาดอีก ${shortage} คน` : ''}</div>
+                  <div className="col-curr-text">จัดแล้ว {assigned} คน • วางชื่อ {scheduled} คน{shortage ? ` • ขาดอีก ${shortage} คน` : ''}</div>
                   {annualLeaveCount || personalLeaveCount || sickLeaveCount || absentCount ? <div className="schedule-attendance-summary">ลา {annualLeaveCount} • กิจ {personalLeaveCount} • ป่วย {sickLeaveCount} • ขาด {absentCount}</div> : null}
                   <button type="button" className="schedule-inline-link" onClick={() => navigate(routePaths.manageScheduleBlock, { state: { blockId: block.id, returnTo: routePaths.desktopSchedule, selectedDateKey: boardDateKey } })}>
-                    <PencilLine size={14} /> แก้ไขข้อมูลงาน
+                    <PencilLine size={14} /> แก้ไขรอบงาน
                   </button>
                 </div>
 
                 <div className="col-body">
                   <div className="task-section">
-                    <p className="section-label">งานหลัก</p>
+                    <p className="section-label">หน้าที่ในรอบ</p>
                     <ul className="task-list">
                       {block.tasks.map((task) => <li key={task}>{task}</li>)}
                     </ul>
@@ -217,7 +230,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
                           onClick={() => navigate(routePaths.removeEmployee, { state: { blockId: block.id, employeeId: id, selectedDateKey: boardDateKey, returnTo: routePaths.desktopSchedule } })}
                         />
                       ))}
-                      {!block.employeeIds.length ? <div className="empty-card compact">ยังไม่มีพนักงานในช่วงนี้</div> : null}
+                      {!block.employeeIds.length ? <div className="empty-card compact">ยังไม่มีพนักงานในรอบนี้</div> : null}
                     </div>
 
                     <div className="schedule-column-actions">
@@ -226,7 +239,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
                         className="add-employee-btn"
                         onClick={() => navigate(routePaths.addEmployee, { state: { blockId: block.id, selectedDateKey: boardDateKey, returnTo: routePaths.desktopSchedule } })}
                       >
-                        <Plus size={16} /> เพิ่มคน
+                        <Plus size={16} /> เพิ่มคนในรอบ
                       </button>
                       {shortage ? <button type="button" className="ghost-button schedule-auto-fill-btn" disabled={!availableForAuto} onClick={() => autoAssignEmployeesToBlock(block.id, boardDateKey)}>{availableForAuto ? 'เพิ่มอัตโนมัติ' : 'ไม่มีคนให้เพิ่ม'}</button> : null}
                     </div>
@@ -235,7 +248,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
               </article>
             );
           })}
-          {!dateBlocks.length ? <div className="empty-card">วันนี้ยังไม่มีช่วงงานในตาราง สามารถเพิ่มช่วงงานของวันที่เลือกได้ทันที</div> : null}
+          {!dateBlocks.length ? <div className="empty-card">วันนี้ยังไม่มีรอบงานในตาราง สามารถเพิ่มรอบงานของวันที่เลือกได้ทันที</div> : null}
         </div>
       </section>
     </DesktopWorkspace>

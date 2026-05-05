@@ -993,6 +993,14 @@ a, button {
   margin: 0;
   color: var(--text-main);
 }
+
+.col-time-meta {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .col-time.text-danger { color: var(--danger-text); }
 
 .col-title {
@@ -1455,6 +1463,115 @@ a, button {
 .weekly-schedule-start-time.warning {
   border-color: #fde68a;
   color: #b45309;
+}
+
+.weekly-schedule-start-time.danger {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.weekly-schedule-round-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.weekly-schedule-round-card.warning {
+  border-color: #fde68a;
+  background: #fffdf4;
+}
+
+.weekly-schedule-round-card.danger {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.weekly-schedule-round-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.weekly-schedule-round-head strong,
+.weekly-schedule-round-head p {
+  display: block;
+}
+
+.weekly-schedule-round-head p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.weekly-schedule-round-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.weekly-schedule-round-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.weekly-schedule-round-duty strong,
+.weekly-schedule-round-duty p {
+  display: block;
+}
+
+.weekly-schedule-round-duty strong {
+  font-size: 12px;
+}
+
+.weekly-schedule-round-duty p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.weekly-schedule-round-employees {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.weekly-schedule-round-employees span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(240, 249, 255, 0.88);
+  border: 1px solid rgba(186, 230, 253, 0.92);
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.weekly-schedule-round-employees.empty span {
+  background: #ffffff;
+  border-style: dashed;
+  border-color: rgba(203, 213, 225, 0.96);
+  color: var(--text-muted);
+}
+
+.weekly-schedule-round-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.weekly-schedule-round-actions .schedule-inline-link {
+  margin-top: 0;
 }
 
 .employee-mobile-week-toolbar {
@@ -4302,6 +4419,26 @@ a, button {
   display: flex;
   justify-content: flex-end;
   margin-top: 18px;
+}
+
+.schedule-round-editor-actions {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.schedule-round-preview-note {
+  display: grid;
+  gap: 6px;
+}
+
+.schedule-round-preview-note strong,
+.schedule-round-preview-note span {
+  display: block;
+}
+
+.schedule-round-preview-note span {
+  color: var(--text-muted);
 }
 
 .flow-submit {

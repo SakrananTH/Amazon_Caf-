@@ -400,11 +400,99 @@ export function computeBlockStatus(required, assigned) {
   return 'warning';
 }
 
+export function normalizeClockValue(value = '') {
+  const trimmedValue = String(value ?? '').trim();
+  const matchedParts = trimmedValue.match(/^(\d{1,2}):(\d{2})$/);
+  if (!matchedParts) {
+    return '';
+  }
+
+  const hours = Number(matchedParts[1]);
+  const minutes = Number(matchedParts[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return '';
+  }
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+export function parseBlockTimeRange(timeLabel = '') {
+  const [rawStartTime = '', rawEndTime = ''] = String(timeLabel ?? '').split('-').map((segment) => segment.trim());
+  return {
+    startTime: normalizeClockValue(rawStartTime),
+    endTime: normalizeClockValue(rawEndTime),
+  };
+}
+
+export function buildBlockTimeLabel(startTime = '', endTime = '') {
+  const normalizedStartTime = normalizeClockValue(startTime);
+  const normalizedEndTime = normalizeClockValue(endTime);
+
+  if (normalizedStartTime && normalizedEndTime) {
+    return `${normalizedStartTime} - ${normalizedEndTime}`;
+  }
+
+  return normalizedStartTime || normalizedEndTime || '';
+}
+
+function inferRoundLabelFromStartTime(startTime = '') {
+  const normalizedStartTime = normalizeClockValue(startTime);
+  if (!normalizedStartTime) {
+    return 'รอบงาน';
+  }
+
+  const [hoursText = '0', minutesText = '0'] = normalizedStartTime.split(':');
+  const totalMinutes = (Number(hoursText) * 60) + Number(minutesText);
+  if (totalMinutes < 450) {
+    return 'รอบเช้า';
+  }
+  if (totalMinutes < 720) {
+    return 'รอบสาย';
+  }
+  if (totalMinutes < 960) {
+    return 'รอบบ่าย';
+  }
+  if (totalMinutes >= 960) {
+    return 'รอบเย็น';
+  }
+  return 'รอบงาน';
+}
+
+export function getBlockRoundLabel(block = {}) {
+  const explicitRoundLabel = String(block?.roundLabel ?? block?.shiftLabel ?? '').trim();
+  if (explicitRoundLabel) {
+    return explicitRoundLabel;
+  }
+
+  const { startTime } = parseBlockTimeRange(block?.time ?? '');
+  return inferRoundLabelFromStartTime(block?.startTime ?? startTime);
+}
+
+export function getBlockEndLabel(block = {}) {
+  const { endTime } = parseBlockTimeRange(block?.time ?? '');
+  return normalizeClockValue(block?.endTime ?? endTime);
+}
+
+export function getBlockStartLabel(block = {}) {
+  const { startTime } = parseBlockTimeRange(block?.time ?? '');
+  return normalizeClockValue(block?.startTime ?? startTime);
+}
+
 function normalizeBlock(block, employeesById = new Map(), fallbackDateKey = formatDateKey()) {
+  const parsedTimeRange = parseBlockTimeRange(block.time ?? '');
+  const startTime = normalizeClockValue(block.startTime ?? parsedTimeRange.startTime);
+  const endTime = normalizeClockValue(block.endTime ?? parsedTimeRange.endTime);
+  const timeLabel = buildBlockTimeLabel(startTime, endTime) || String(block.time ?? '').trim();
+
   return {
     ...block,
     dateKey: String(block.dateKey ?? fallbackDateKey),
     templateId: block.templateId ?? block.id,
+    time: timeLabel,
+    startTime,
+    endTime,
+    roundPresetKey: String(block.roundPresetKey ?? 'custom'),
+    roundLabel: getBlockRoundLabel({ ...block, startTime, time: timeLabel }),
     tasks: [...block.tasks],
     employeeIds: [...new Set(block.employeeIds)],
     status: computeBlockStatus(block.required, countAssignableEmployees(block.employeeIds, employeesById)),
@@ -976,16 +1064,23 @@ export function AppStateProvider({ children }) {
   };
 
   const saveTimeBlock = (blockInput) => {
+    const startTime = normalizeClockValue(blockInput.startTime);
+    const endTime = normalizeClockValue(blockInput.endTime);
+    const derivedTimeLabel = buildBlockTimeLabel(startTime, endTime);
     const normalizedInput = {
       ...blockInput,
       dateKey: String(blockInput.dateKey ?? formatDateKey()),
-      time: blockInput.time.trim(),
+      time: derivedTimeLabel || String(blockInput.time ?? '').trim(),
+      startTime,
+      endTime,
+      roundPresetKey: String(blockInput.roundPresetKey ?? 'custom'),
+      roundLabel: String(blockInput.roundLabel ?? '').trim(),
       title: blockInput.title.trim(),
       required: Math.min(MAX_EMPLOYEES, Number(blockInput.required) || 0),
       tasks: blockInput.tasks.map((task) => task.trim()).filter(Boolean),
     };
 
-    if (!normalizedInput.time || !normalizedInput.title || normalizedInput.required <= 0) {
+    if (!normalizedInput.time || !normalizedInput.title || !normalizedInput.roundLabel || normalizedInput.required <= 0) {
       return null;
     }
 
