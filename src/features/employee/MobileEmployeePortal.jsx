@@ -673,22 +673,26 @@ export function EmployeeMobileShiftPage() {
   const todayDate = useMemo(() => addCalendarDays(new Date(), weekOffset * 7), [weekOffset]);
   const todayDateKey = formatDateKey(todayDate);
   const currentEmployee = findPortalEmployee(employees, employeePortalSessionId);
+  const todayScheduleBlocks = useMemo(() => [...getTimeBlocksForDate(timeBlocks, todayDateKey)].sort(sortBlocksByTime), [timeBlocks, todayDateKey]);
   const assignedBlocks = useMemo(() => currentEmployee ? [...getTimeBlocksForDate(timeBlocks, todayDateKey)].sort(sortBlocksByTime).filter((block) => block.employeeIds.includes(currentEmployee.id)) : [], [currentEmployee, timeBlocks, todayDateKey]);
   const weekDays = useMemo(() => getWeekDates(todayDate).map((date) => {
     const dateKey = formatDateKey(date);
-    const dayBlocks = currentEmployee ? [...getTimeBlocksForDate(timeBlocks, dateKey)].sort(sortBlocksByTime).filter((block) => block.employeeIds.includes(currentEmployee.id)) : [];
+    const scheduleBlocks = [...getTimeBlocksForDate(timeBlocks, dateKey)].sort(sortBlocksByTime);
+    const dayBlocks = currentEmployee ? scheduleBlocks.filter((block) => block.employeeIds.includes(currentEmployee.id)) : [];
     const firstBlock = dayBlocks[0] ?? null;
     return {
       date,
       dateKey,
       dayLabel: formatThaiDayCardLabel(date),
       fullLabel: formatThaiFullDate(dateKey),
+      hasPublishedSchedule: scheduleBlocks.length > 0,
       blocks: dayBlocks,
       firstStartLabel: firstBlock ? getBlockStartLabel(firstBlock.time) : '',
     };
   }), [currentEmployee, timeBlocks, todayDate]);
   const weekShiftCount = weekDays.reduce((sum, day) => sum + day.blocks.length, 0);
   const todayStartLabel = assignedBlocks[0] ? getBlockStartLabel(assignedBlocks[0].time) : '';
+  const todayHasPublishedSchedule = todayScheduleBlocks.length > 0;
 
   return (
     <EmployeePortalGate title="กะของฉัน" currentEmployee={currentEmployee} onLogout={employeePortalLogout}>
@@ -713,11 +717,11 @@ export function EmployeeMobileShiftPage() {
           <article className="employee-mobile-week-card">
             <div className="employee-mobile-week-head">
               <strong>{formatThaiFullDate(todayDateKey)}</strong>
-              <span className={`status-chip ${todayStartLabel ? 'ok' : 'warning'}`}>{todayStartLabel ? `เข้า ${todayStartLabel}` : 'หยุด'}</span>
+              <span className={`status-chip ${todayStartLabel ? 'ok' : todayHasPublishedSchedule ? 'warning' : 'attention'}`}>{todayStartLabel ? `เข้า ${todayStartLabel}` : todayHasPublishedSchedule ? 'หยุด' : 'ยังไม่อัพเดต'}</span>
             </div>
-            <p>{assignedBlocks.length ? `วันนี้คุณมีกะ ${assignedBlocks.length} ช่วง` : 'วันนี้ยังไม่มีกะที่ได้รับมอบหมาย'}</p>
+            <p>{assignedBlocks.length ? `วันนี้คุณมีกะ ${assignedBlocks.length} ช่วง` : todayHasPublishedSchedule ? 'วันนี้ยังไม่มีกะที่ได้รับมอบหมาย' : 'รอผู้จัดการอัพเดตตารางของวันนี้'}</p>
             <div className={`employee-mobile-week-list ${assignedBlocks.length ? '' : 'empty'}`.trim()}>
-              {assignedBlocks.length ? assignedBlocks.map((block) => <span key={block.id}>เข้า {getBlockStartLabel(block.time)} • {block.time}</span>) : <span>ยังไม่มีเวลาเข้างานในวันนี้</span>}
+              {assignedBlocks.length ? assignedBlocks.map((block) => <span key={block.id}>เข้า {getBlockStartLabel(block.time)} • {block.time}</span>) : <span>{todayHasPublishedSchedule ? 'ยังไม่มีเวลาเข้างานในวันนี้' : 'ตารางยังไม่อัพเดต'}</span>}
             </div>
           </article>
         </div>
@@ -736,11 +740,11 @@ export function EmployeeMobileShiftPage() {
             <article key={day.dateKey} className="employee-mobile-week-card">
               <div className="employee-mobile-week-head">
                 <strong>{day.dayLabel}</strong>
-                <span className={`status-chip ${day.firstStartLabel ? 'ok' : 'warning'}`}>{day.firstStartLabel ? `เข้า ${day.firstStartLabel}` : 'หยุด'}</span>
+                <span className={`status-chip ${day.firstStartLabel ? 'ok' : day.hasPublishedSchedule ? 'warning' : 'attention'}`}>{day.firstStartLabel ? `เข้า ${day.firstStartLabel}` : day.hasPublishedSchedule ? 'หยุด' : 'ยังไม่อัพเดต'}</span>
               </div>
               <p>{day.fullLabel}</p>
               <div className={`employee-mobile-week-list ${day.blocks.length ? '' : 'empty'}`.trim()}>
-                {day.blocks.length ? day.blocks.map((block) => <span key={`${day.dateKey}-${block.id}`}>เข้า {getBlockStartLabel(block.time)} • {block.time}</span>) : <span>ยังไม่มีกะในวันนี้</span>}
+                {day.blocks.length ? day.blocks.map((block) => <span key={`${day.dateKey}-${block.id}`}>เข้า {getBlockStartLabel(block.time)} • {block.time}</span>) : <span>{day.hasPublishedSchedule ? 'ยังไม่มีกะในวันนี้' : 'ตารางยังไม่อัพเดต'}</span>}
               </div>
             </article>
           ))}
