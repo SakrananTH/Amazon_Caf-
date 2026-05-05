@@ -265,6 +265,19 @@ function formatEmployeeRoundWindow(block) {
   return block.time || '-';
 }
 
+function getEmployeeShiftStatus(hasAssignedBlocks, availabilityMeta, hasPublishedSchedule) {
+  if (hasAssignedBlocks) {
+    return { tone: 'ok', label: 'มีงาน' };
+  }
+  if (availabilityMeta && availabilityMeta.assignable === false) {
+    return { tone: 'warning', label: 'ลาหยุด' };
+  }
+  if (hasPublishedSchedule) {
+    return { tone: 'attention', label: 'หยุด' };
+  }
+  return { tone: 'attention', label: 'ยังไม่อัพเดต' };
+}
+
 function getWeekDates(baseDate = new Date()) {
   const currentDate = new Date(baseDate);
   currentDate.setHours(0, 0, 0, 0);
@@ -580,7 +593,7 @@ export function EmployeeMobileHomePage() {
     <EmployeePortalGate title="หน้าพนักงาน" currentEmployee={currentEmployee} onLogout={employeePortalLogout}>
       <section className="employee-mobile-hero-card">
         <div>
-          <strong>{todayAvailability?.assignable ? (nextBlock ? `${getBlockRoundLabel(nextBlock)} ${formatEmployeeRoundWindow(nextBlock)}` : 'วันนี้ยังไม่มีรอบงานที่ถูกมอบหมาย') : `วันนี้${todayAvailability?.label ?? 'งดลงกะ'}`}</strong>
+          <strong>{todayAvailability?.assignable ? (nextBlock ? `${getBlockRoundLabel(nextBlock)} ${formatEmployeeRoundWindow(nextBlock)}` : 'วันนี้ยังไม่มีกะงานที่ถูกมอบหมาย') : `วันนี้${todayAvailability?.label ?? 'งดลงกะ'}`}</strong>
           <p>{todayAvailability?.assignable ? (nextBlock ? nextBlock.title : 'รอผู้จัดการจัดกะหรืออัปเดตงานในระบบ') : `สถานะวันนี้: ${todayAvailability?.label ?? 'ไม่พร้อมลงกะ'}`}</p>
         </div>
         <Link className="employee-mobile-inline-link" to={routePaths.employeeSchedule}>ดูกะทั้งหมด <ArrowRight size={14} /></Link>
@@ -590,7 +603,7 @@ export function EmployeeMobileHomePage() {
         <div className="employee-mobile-section-head">
           <div>
             <h3>กะของฉันวันนี้</h3>
-            <p>สรุปรอบงานและเวลาเข้าออกของคุณก่อนเริ่มงาน</p>
+            <p>สรุปกะหลักและเวลาเข้าออกของคุณก่อนเริ่มงาน</p>
           </div>
           <CalendarDays size={18} />
         </div>
@@ -602,7 +615,7 @@ export function EmployeeMobileHomePage() {
               <p>{block.tasks.slice(0, 3).join(' • ')}</p>
             </article>
           ))}
-          {!assignedBlocks.length ? <div className="empty-card">วันนี้ยังไม่มีรอบงานของคุณ</div> : null}
+          {!assignedBlocks.length ? <div className="empty-card">วันนี้ยังไม่มีกะงานของคุณ</div> : null}
         </div>
       </section>
 
@@ -610,7 +623,7 @@ export function EmployeeMobileHomePage() {
         <div className="employee-mobile-section-head">
           <div>
             <h3>แผนกะ 7 วันข้างหน้า</h3>
-            <p>ดูได้ล่วงหน้าว่าแต่ละวันคุณถูกจัดไว้ในรอบงานใดบ้าง</p>
+            <p>ดูได้ล่วงหน้าว่าแต่ละวันคุณถูกจัดไว้ในกะงานใดบ้าง</p>
           </div>
           <CalendarDays size={18} />
         </div>
@@ -624,7 +637,7 @@ export function EmployeeMobileHomePage() {
               <p>{day.fullLabel}</p>
               {day.myAvailability.assignable && day.assignedBlocks.length ? <div className="employee-mobile-week-list">
                 {day.assignedBlocks.slice(0, 2).map((block) => <span key={`${day.dateKey}-${block.id}`}>{getBlockRoundLabel(block)} • {formatEmployeeRoundWindow(block)}</span>)}
-              </div> : <div className="employee-mobile-week-list empty"><span>วันนั้นยังไม่มีรอบงานของคุณ</span></div>}
+              </div> : <div className="employee-mobile-week-list empty"><span>วันนั้นยังไม่มีกะงานของคุณ</span></div>}
             </article>
           ))}
         </div>
@@ -670,9 +683,9 @@ export function EmployeeMobileHomePage() {
           <small>รายการ</small>
         </article>
         <article className="employee-mobile-stat-card">
-          <span>รอบงานวันนี้</span>
+          <span>กะงานวันนี้</span>
           <strong>{assignedBlocks.length}</strong>
-          <small>รอบ</small>
+          <small>กะ</small>
         </article>
         <article className="employee-mobile-stat-card">
           <span>ปัญหาค้าง</span>
@@ -685,18 +698,25 @@ export function EmployeeMobileHomePage() {
 }
 
 export function EmployeeMobileShiftPage() {
-  const { employeePortalLogout, employeePortalSessionId, employees, timeBlocks } = useAppState();
+  const { employeeAvailabilityCalendar, employeePortalLogout, employeePortalSessionId, employees, timeBlocks } = useAppState();
   const [weekOffset, setWeekOffset] = useState(0);
+  const [expandedDateKey, setExpandedDateKey] = useState(null);
   const todayDate = useMemo(() => addCalendarDays(new Date(), weekOffset * 7), [weekOffset]);
   const todayDateKey = formatDateKey(todayDate);
   const currentEmployee = findPortalEmployee(employees, employeePortalSessionId);
   const todayScheduleBlocks = useMemo(() => [...getTimeBlocksForDate(timeBlocks, todayDateKey)].sort(sortBlocksByTime), [timeBlocks, todayDateKey]);
   const assignedBlocks = useMemo(() => currentEmployee ? [...getTimeBlocksForDate(timeBlocks, todayDateKey)].sort(sortBlocksByTime).filter((block) => block.employeeIds.includes(currentEmployee.id)) : [], [currentEmployee, timeBlocks, todayDateKey]);
+
+  useEffect(() => {
+    setExpandedDateKey(todayDateKey);
+  }, [todayDateKey]);
+
   const weekDays = useMemo(() => getWeekDates(todayDate).map((date) => {
     const dateKey = formatDateKey(date);
     const scheduleBlocks = [...getTimeBlocksForDate(timeBlocks, dateKey)].sort(sortBlocksByTime);
     const dayBlocks = currentEmployee ? scheduleBlocks.filter((block) => block.employeeIds.includes(currentEmployee.id)) : [];
     const firstBlock = dayBlocks[0] ?? null;
+    const availabilityMeta = currentEmployee ? getEmployeeAvailabilityMeta(currentEmployee, dateKey, employeeAvailabilityCalendar) : null;
     return {
       date,
       dateKey,
@@ -704,12 +724,16 @@ export function EmployeeMobileShiftPage() {
       fullLabel: formatThaiFullDate(dateKey),
       hasPublishedSchedule: scheduleBlocks.length > 0,
       blocks: dayBlocks,
-      firstStartLabel: firstBlock ? getBlockStartLabel(firstBlock.time) : '',
+      firstBlock,
+      firstStartLabel: firstBlock ? getBlockStartLabel(firstBlock) : '',
+      availabilityMeta,
     };
-  }), [currentEmployee, timeBlocks, todayDate]);
+  }), [currentEmployee, employeeAvailabilityCalendar, timeBlocks, todayDate]);
   const weekShiftCount = weekDays.reduce((sum, day) => sum + day.blocks.length, 0);
-  const todayStartLabel = assignedBlocks[0] ? getBlockStartLabel(assignedBlocks[0].time) : '';
+  const todayStartLabel = assignedBlocks[0] ? getBlockStartLabel(assignedBlocks[0]) : '';
   const todayHasPublishedSchedule = todayScheduleBlocks.length > 0;
+  const todayAvailabilityMeta = currentEmployee ? getEmployeeAvailabilityMeta(currentEmployee, todayDateKey, employeeAvailabilityCalendar) : null;
+  const todayStatus = getEmployeeShiftStatus(Boolean(assignedBlocks.length), todayAvailabilityMeta, todayHasPublishedSchedule);
 
   return (
     <EmployeePortalGate title="กะของฉัน" currentEmployee={currentEmployee} onLogout={employeePortalLogout}>
@@ -717,7 +741,7 @@ export function EmployeeMobileShiftPage() {
         <div className="employee-mobile-section-head">
           <div>
             <h3>เข้างานวันนี้</h3>
-            <p>ดูเฉพาะรอบงานและเวลาเข้าออกของคุณในวันที่เลือกไว้</p>
+            <p>แสดงเฉพาะกะหลักของคุณ พร้อมเวลาเข้าออกและหน้าที่ในกะ</p>
           </div>
           <CalendarDays size={18} />
         </div>
@@ -727,19 +751,20 @@ export function EmployeeMobileShiftPage() {
         </div>
         <div className="employee-mobile-week-toolbar">
           <button type="button" className="ghost-button" onClick={() => setWeekOffset((currentValue) => currentValue - 1)}><ChevronLeft size={16} /> สัปดาห์ก่อน</button>
-          <span className="status-chip ok">ทั้งสัปดาห์ {weekShiftCount} รอบ</span>
+          <span className="status-chip ok">ทั้งสัปดาห์ {weekShiftCount} กะ</span>
           <button type="button" className="ghost-button" onClick={() => setWeekOffset((currentValue) => currentValue + 1)}>สัปดาห์ถัดไป <ChevronRight size={16} /></button>
         </div>
         <div className="employee-mobile-week-grid">
           <article className="employee-mobile-week-card">
             <div className="employee-mobile-week-head">
               <strong>{formatThaiFullDate(todayDateKey)}</strong>
-              <span className={`status-chip ${todayStartLabel ? 'ok' : todayHasPublishedSchedule ? 'warning' : 'attention'}`}>{todayStartLabel ? `เข้า ${todayStartLabel}` : todayHasPublishedSchedule ? 'หยุด' : 'ยังไม่อัพเดต'}</span>
+              <span className={`status-chip ${todayStatus.tone}`}>{todayStatus.label}</span>
             </div>
-            <p>{assignedBlocks.length ? `วันนี้คุณมี ${assignedBlocks.length} รอบงาน` : todayHasPublishedSchedule ? 'วันนี้ยังไม่มีรอบงานที่ได้รับมอบหมาย' : 'รอผู้จัดการอัพเดตตารางของวันนี้'}</p>
+            <p>{assignedBlocks.length ? `${getBlockRoundLabel(assignedBlocks[0])} • ${formatEmployeeRoundWindow(assignedBlocks[0])}` : todayHasPublishedSchedule ? 'วันนี้ยังไม่มีกะงานที่ได้รับมอบหมาย' : 'รอผู้จัดการอัพเดตกะของวันนี้'}</p>
             <div className={`employee-mobile-week-list ${assignedBlocks.length ? '' : 'empty'}`.trim()}>
-              {assignedBlocks.length ? assignedBlocks.map((block) => <span key={block.id}>{getBlockRoundLabel(block)} • {formatEmployeeRoundWindow(block)}</span>) : <span>{todayHasPublishedSchedule ? 'ยังไม่มีเวลาเข้างานในวันนี้' : 'ตารางยังไม่อัพเดต'}</span>}
+              {assignedBlocks.length ? assignedBlocks[0].tasks.map((task) => <span key={`${assignedBlocks[0].id}-${task}`}>{task}</span>) : <span>{todayHasPublishedSchedule ? 'วันนี้เป็นวันหยุดของคุณ' : 'ตารางยังไม่อัพเดต'}</span>}
             </div>
+            {todayStartLabel ? <div className="employee-mobile-hero-note">เวลาเข้างานวันนี้ {todayStartLabel}</div> : null}
           </article>
         </div>
       </section>
@@ -748,23 +773,33 @@ export function EmployeeMobileShiftPage() {
         <div className="employee-mobile-section-head">
           <div>
             <h3>เวลาเข้างานรายสัปดาห์</h3>
-            <p>ดูเฉพาะรอบงานของคุณในแต่ละวันของสัปดาห์ที่เลือก</p>
+            <p>หนึ่งวันจะแสดงแค่กะหลักเดียวของคุณ พร้อมขยายดูหน้าที่ในกะได้ทันที</p>
           </div>
           <ClipboardList size={18} />
         </div>
-        <div className="employee-mobile-week-grid">
-          {weekDays.map((day) => (
-            <article key={day.dateKey} className="employee-mobile-week-card">
-              <div className="employee-mobile-week-head">
-                <strong>{day.dayLabel}</strong>
-                <span className={`status-chip ${day.firstStartLabel ? 'ok' : day.hasPublishedSchedule ? 'warning' : 'attention'}`}>{day.firstStartLabel ? `เข้า ${day.firstStartLabel}` : day.hasPublishedSchedule ? 'หยุด' : 'ยังไม่อัพเดต'}</span>
-              </div>
-              <p>{day.fullLabel}</p>
-              <div className={`employee-mobile-week-list ${day.blocks.length ? '' : 'empty'}`.trim()}>
-                {day.blocks.length ? day.blocks.map((block) => <span key={`${day.dateKey}-${block.id}`}>{getBlockRoundLabel(block)} • {formatEmployeeRoundWindow(block)}</span>) : <span>{day.hasPublishedSchedule ? 'ยังไม่มีรอบงานในวันนี้' : 'ตารางยังไม่อัพเดต'}</span>}
-              </div>
-            </article>
-          ))}
+        <div className="employee-mobile-schedule-list">
+          {weekDays.map((day) => {
+            const dayStatus = getEmployeeShiftStatus(Boolean(day.blocks.length), day.availabilityMeta, day.hasPublishedSchedule);
+            const isExpanded = expandedDateKey === day.dateKey;
+
+            return (
+              <button key={day.dateKey} type="button" className={`employee-mobile-schedule-item ${isExpanded ? 'expanded' : ''}`} onClick={() => setExpandedDateKey((currentKey) => currentKey === day.dateKey ? null : day.dateKey)}>
+                <div className="employee-mobile-schedule-item-head">
+                  <div>
+                    <strong>{day.dayLabel}</strong>
+                    <p>{day.fullLabel}</p>
+                  </div>
+                  <span className={`status-chip ${dayStatus.tone}`}>{dayStatus.label}</span>
+                </div>
+                <div className="employee-mobile-schedule-item-summary">
+                  {day.blocks.length ? <span>{getBlockRoundLabel(day.blocks[0])} • {formatEmployeeRoundWindow(day.blocks[0])}</span> : <span>{dayStatus.label === 'ลาหยุด' ? 'วันนี้คุณลาหยุด' : day.hasPublishedSchedule ? 'วันนี้ไม่มีงานที่ได้รับมอบหมาย' : 'รอผู้จัดการอัพเดตตาราง'}</span>}
+                </div>
+                {isExpanded ? <div className={`employee-mobile-week-list ${day.blocks.length ? '' : 'empty'}`.trim()}>
+                  {day.blocks.length ? day.blocks[0].tasks.map((task) => <span key={`${day.dateKey}-${task}`}>{task}</span>) : <span>{dayStatus.label === 'ลาหยุด' ? 'วันนี้คุณไม่ได้ลงกะเพราะลาหยุด' : day.hasPublishedSchedule ? 'วันนี้เป็นวันหยุดของคุณ' : 'ตารางยังไม่อัพเดต'}</span>}
+                </div> : null}
+              </button>
+            );
+          })}
         </div>
       </section>
     </EmployeePortalGate>

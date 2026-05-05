@@ -400,6 +400,138 @@ export function computeBlockStatus(required, assigned) {
   return 'warning';
 }
 
+export const scheduleShiftPresets = [
+  {
+    key: 'morning',
+    label: 'กะเช้า',
+    startTime: '06:30',
+    endTime: '16:30',
+    defaultTitle: 'หน้าที่ในกะเช้า',
+    defaultTasks: ['เปิดร้าน', 'เตรียมวัตถุดิบ', 'ดูแลหน้าร้าน'],
+  },
+  {
+    key: 'late',
+    label: 'กะสาย',
+    startTime: '07:30',
+    endTime: '17:30',
+    defaultTitle: 'หน้าที่ในกะสาย',
+    defaultTasks: ['ดูแลหน้าร้าน', 'เช็กสต็อก', 'ปิดร้าน'],
+  },
+];
+
+const lateShiftTaskKeywords = ['ปิด', 'สต็อก', 'เช็คสต็อก', 'เช็กสต็อก', 'เช็คปิดร้าน', 'เช็กปิดร้าน'];
+
+function getScheduleShiftPreset(presetKey = 'morning') {
+  return scheduleShiftPresets.find((preset) => preset.key === presetKey) ?? scheduleShiftPresets[0];
+}
+
+function getScheduleShiftPresetKey(startTime = '', hintText = '') {
+  const normalizedStartTime = normalizeClockValue(startTime);
+  const normalizedHint = normalizeSearchValue(hintText);
+
+  if (lateShiftTaskKeywords.some((keyword) => normalizedHint.includes(normalizeSearchValue(keyword)))) {
+    return 'late';
+  }
+
+  if (normalizedStartTime) {
+    const [hoursText = '0', minutesText = '0'] = normalizedStartTime.split(':');
+    const totalMinutes = (Number(hoursText) * 60) + Number(minutesText);
+    if (totalMinutes >= 450) {
+      return 'late';
+    }
+  }
+
+  return 'morning';
+}
+
+function dedupeTasksWithDefaults(tasks = [], presetKey = 'morning') {
+  const preset = getScheduleShiftPreset(presetKey);
+  return [...new Set([...preset.defaultTasks, ...tasks.map((task) => String(task).trim()).filter(Boolean)])];
+}
+
+function ensureSingleShiftPerDay(blocks = []) {
+  const blocksByDate = new Map();
+  blocks.forEach((block) => {
+    const dateKey = String(block.dateKey ?? formatDateKey());
+    if (!blocksByDate.has(dateKey)) {
+      blocksByDate.set(dateKey, []);
+    }
+    blocksByDate.get(dateKey).push(block);
+  });
+
+  return [...blocksByDate.values()].flatMap((dateBlocks) => {
+    const orderedBlocks = [...dateBlocks].sort((leftBlock, rightBlock) => {
+      const leftPreset = getScheduleShiftPreset(leftBlock.roundPresetKey);
+      const rightPreset = getScheduleShiftPreset(rightBlock.roundPresetKey);
+      return (rightPreset.key === 'late') - (leftPreset.key === 'late');
+    });
+    const assignedEmployeeIds = new Set();
+
+    return orderedBlocks.map((block) => {
+      const nextEmployeeIds = block.employeeIds.filter((employeeId) => {
+        if (assignedEmployeeIds.has(employeeId)) {
+          return false;
+        }
+        assignedEmployeeIds.add(employeeId);
+        return true;
+      });
+
+      return {
+        ...block,
+        employeeIds: nextEmployeeIds,
+      };
+    });
+  });
+}
+
+function collapseBlocksIntoPrimaryShifts(blocks = [], employeesById = new Map(), fallbackDateKey = formatDateKey()) {
+  const groupedBlocks = new Map();
+
+  blocks.forEach((block, index) => {
+    const parsedTimeRange = parseBlockTimeRange(block.time ?? '');
+    const startTime = normalizeClockValue(block.startTime ?? parsedTimeRange.startTime);
+    const presetKey = getScheduleShiftPresetKey(startTime, `${block.title ?? ''} ${(block.tasks ?? []).join(' ')}`);
+    const dateKey = String(block.dateKey ?? fallbackDateKey);
+    const groupKey = `${dateKey}:${presetKey}`;
+    const preset = getScheduleShiftPreset(presetKey);
+
+    if (!groupedBlocks.has(groupKey)) {
+      groupedBlocks.set(groupKey, {
+        id: block.id ?? createDateScopedBlockId(dateKey, `${presetKey}-${index}`, index),
+        templateId: block.templateId ?? block.id ?? `${presetKey}-${index}`,
+        dateKey,
+        roundPresetKey: preset.key,
+        roundLabel: preset.label,
+        startTime: preset.startTime,
+        endTime: preset.endTime,
+        time: buildBlockTimeLabel(preset.startTime, preset.endTime),
+        title: preset.defaultTitle,
+        required: 0,
+        tasks: [],
+        employeeIds: [],
+      });
+    }
+
+    const groupedBlock = groupedBlocks.get(groupKey);
+    groupedBlock.required = Math.max(groupedBlock.required, Number(block.required) || 0);
+    groupedBlock.tasks = dedupeTasksWithDefaults([...groupedBlock.tasks, ...(block.tasks ?? []), block.title ?? ''], preset.key);
+    groupedBlock.employeeIds = [...groupedBlock.employeeIds, ...(block.employeeIds ?? [])];
+  });
+
+  const collapsedBlocks = [...groupedBlocks.values()].map((block) => {
+    const preset = getScheduleShiftPreset(block.roundPresetKey);
+    return normalizeBlock({
+      ...block,
+      title: preset.defaultTitle,
+      required: Math.max(block.required, block.employeeIds.length, 1),
+      tasks: dedupeTasksWithDefaults(block.tasks, block.roundPresetKey),
+      employeeIds: [...new Set(block.employeeIds)],
+    }, employeesById, block.dateKey);
+  });
+
+  return ensureSingleShiftPerDay(collapsedBlocks).map((block) => normalizeBlock(block, employeesById, block.dateKey));
+}
+
 export function normalizeClockValue(value = '') {
   const trimmedValue = String(value ?? '').trim();
   const matchedParts = trimmedValue.match(/^(\d{1,2}):(\d{2})$/);
@@ -436,26 +568,7 @@ export function buildBlockTimeLabel(startTime = '', endTime = '') {
 }
 
 function inferRoundLabelFromStartTime(startTime = '') {
-  const normalizedStartTime = normalizeClockValue(startTime);
-  if (!normalizedStartTime) {
-    return 'รอบงาน';
-  }
-
-  const [hoursText = '0', minutesText = '0'] = normalizedStartTime.split(':');
-  const totalMinutes = (Number(hoursText) * 60) + Number(minutesText);
-  if (totalMinutes < 450) {
-    return 'รอบเช้า';
-  }
-  if (totalMinutes < 720) {
-    return 'รอบสาย';
-  }
-  if (totalMinutes < 960) {
-    return 'รอบบ่าย';
-  }
-  if (totalMinutes >= 960) {
-    return 'รอบเย็น';
-  }
-  return 'รอบงาน';
+  return getScheduleShiftPreset(getScheduleShiftPresetKey(startTime)).label;
 }
 
 export function getBlockRoundLabel(block = {}) {
@@ -480,9 +593,12 @@ export function getBlockStartLabel(block = {}) {
 
 function normalizeBlock(block, employeesById = new Map(), fallbackDateKey = formatDateKey()) {
   const parsedTimeRange = parseBlockTimeRange(block.time ?? '');
-  const startTime = normalizeClockValue(block.startTime ?? parsedTimeRange.startTime);
-  const endTime = normalizeClockValue(block.endTime ?? parsedTimeRange.endTime);
-  const timeLabel = buildBlockTimeLabel(startTime, endTime) || String(block.time ?? '').trim();
+  const requestedStartTime = normalizeClockValue(block.startTime ?? parsedTimeRange.startTime);
+  const presetKey = String(block.roundPresetKey ?? getScheduleShiftPresetKey(requestedStartTime, `${block.title ?? ''} ${(block.tasks ?? []).join(' ')}`));
+  const preset = getScheduleShiftPreset(presetKey);
+  const startTime = preset.startTime;
+  const endTime = preset.endTime;
+  const timeLabel = buildBlockTimeLabel(startTime, endTime);
 
   return {
     ...block,
@@ -491,9 +607,10 @@ function normalizeBlock(block, employeesById = new Map(), fallbackDateKey = form
     time: timeLabel,
     startTime,
     endTime,
-    roundPresetKey: String(block.roundPresetKey ?? 'custom'),
-    roundLabel: getBlockRoundLabel({ ...block, startTime, time: timeLabel }),
-    tasks: [...block.tasks],
+    roundPresetKey: preset.key,
+    roundLabel: preset.label,
+    title: String(block.title ?? '').trim() || preset.defaultTitle,
+    tasks: dedupeTasksWithDefaults(block.tasks ?? [], preset.key),
     employeeIds: [...new Set(block.employeeIds)],
     status: computeBlockStatus(block.required, countAssignableEmployees(block.employeeIds, employeesById)),
   };
@@ -513,10 +630,11 @@ function buildSeedScheduleBlocks(baseBlocks = [], employeesById = new Map(), sta
   const rosterIds = Array.from(employeesById.values()).filter((employee) => !isManagerRole(employee.role)).map((employee) => employee.id);
   const firstDate = new Date(startDate);
   firstDate.setHours(0, 0, 0, 0);
+  const normalizedBaseBlocks = collapseBlocksIntoPrimaryShifts(baseBlocks, employeesById, formatDateKey(firstDate));
 
   return Array.from({ length: totalDays }, (_, dayOffset) => {
     const dateKey = formatDateKey(addDays(firstDate, dayOffset));
-    return baseBlocks.map((block, blockIndex) => normalizeBlock({
+    return normalizedBaseBlocks.map((block, blockIndex) => normalizeBlock({
       ...block,
       id: createDateScopedBlockId(dateKey, block.templateId ?? block.id, blockIndex),
       templateId: block.templateId ?? block.id,
@@ -532,12 +650,13 @@ function sanitizeTimeBlocks(blocks, allowedEmployeeIds, employeesById = new Map(
     ...block,
     employeeIds: block.employeeIds.filter((employeeId) => allowedEmployeeIds.has(employeeId) && isEmployeeScheduleEligible(employeesById.get(employeeId))),
   }, employeesById, block.dateKey ?? formatDateKey()));
+  const collapsedBlocks = collapseBlocksIntoPrimaryShifts(sanitizedBlocks, employeesById, formatDateKey());
 
   if (hasDateScopedBlocks) {
-    return sanitizedBlocks;
+    return collapsedBlocks;
   }
 
-  return buildSeedScheduleBlocks(sanitizedBlocks, employeesById);
+  return buildSeedScheduleBlocks(collapsedBlocks, employeesById);
 }
 
 function cloneRequests() {
@@ -957,7 +1076,15 @@ export function AppStateProvider({ children }) {
     const updatedBlock = normalizeBlock({ ...block, employeeIds: nextEmployeeIds }, employeesById, block.dateKey);
     setState((currentState) => ({
       ...currentState,
-      timeBlocks: currentState.timeBlocks.map((entry) => (entry.id === blockId ? updatedBlock : entry)),
+      timeBlocks: currentState.timeBlocks.map((entry) => {
+        if (entry.dateKey === block.dateKey && entry.id !== blockId) {
+          return normalizeBlock({
+            ...entry,
+            employeeIds: entry.employeeIds.filter((employeeId) => !safeSelectedIds.includes(employeeId)),
+          }, employeesById, entry.dateKey);
+        }
+        return entry.id === blockId ? updatedBlock : entry;
+      }),
     }));
     return updatedBlock;
   };
@@ -1011,6 +1138,12 @@ export function AppStateProvider({ children }) {
         if (entry.id === targetBlockId) {
           return nextTargetBlock;
         }
+        if (entry.dateKey === targetBlock.dateKey) {
+          return normalizeBlock({
+            ...entry,
+            employeeIds: entry.employeeIds.filter((entryEmployeeId) => entryEmployeeId !== employeeId),
+          }, employeesById, entry.dateKey);
+        }
         return entry;
       }),
     }));
@@ -1033,7 +1166,7 @@ export function AppStateProvider({ children }) {
     }
 
     const selectedIds = employees
-      .filter((employee) => isEmployeeScheduleEligible(employee, targetDateKey, employeeAvailabilityCalendar) && !block.employeeIds.includes(employee.id))
+      .filter((employee) => isEmployeeScheduleEligible(employee, targetDateKey, employeeAvailabilityCalendar) && !block.employeeIds.includes(employee.id) && !getTimeBlocksForDate(timeBlocks, targetDateKey).some((entry) => entry.id !== block.id && entry.employeeIds.includes(employee.id)))
       .map((employee) => ({
         employee,
         score: scoreEmployeeForBlock(employee, block),
@@ -1065,26 +1198,30 @@ export function AppStateProvider({ children }) {
 
   const saveTimeBlock = (blockInput) => {
     const startTime = normalizeClockValue(blockInput.startTime);
-    const endTime = normalizeClockValue(blockInput.endTime);
-    const derivedTimeLabel = buildBlockTimeLabel(startTime, endTime);
+    const presetKey = String(blockInput.roundPresetKey ?? getScheduleShiftPresetKey(startTime, `${blockInput.title ?? ''} ${(blockInput.tasks ?? []).join(' ')}`));
+    const preset = getScheduleShiftPreset(presetKey);
+    const endTime = preset.endTime;
+    const derivedTimeLabel = buildBlockTimeLabel(preset.startTime, preset.endTime);
     const normalizedInput = {
       ...blockInput,
       dateKey: String(blockInput.dateKey ?? formatDateKey()),
       time: derivedTimeLabel || String(blockInput.time ?? '').trim(),
-      startTime,
+      startTime: preset.startTime,
       endTime,
-      roundPresetKey: String(blockInput.roundPresetKey ?? 'custom'),
-      roundLabel: String(blockInput.roundLabel ?? '').trim(),
-      title: blockInput.title.trim(),
+      roundPresetKey: preset.key,
+      roundLabel: preset.label,
+      title: String(blockInput.title ?? '').trim() || preset.defaultTitle,
       required: Math.min(MAX_EMPLOYEES, Number(blockInput.required) || 0),
-      tasks: blockInput.tasks.map((task) => task.trim()).filter(Boolean),
+      tasks: dedupeTasksWithDefaults(blockInput.tasks.map((task) => task.trim()).filter(Boolean), preset.key),
     };
 
     if (!normalizedInput.time || !normalizedInput.title || !normalizedInput.roundLabel || normalizedInput.required <= 0) {
       return null;
     }
 
-    const existingBlock = normalizedInput.id ? timeBlocks.find((entry) => entry.id === normalizedInput.id) : null;
+    const existingBlock = normalizedInput.id
+      ? timeBlocks.find((entry) => entry.id === normalizedInput.id)
+      : timeBlocks.find((entry) => entry.dateKey === normalizedInput.dateKey && String(entry.roundPresetKey) === String(normalizedInput.roundPresetKey));
     const nextBlock = normalizeBlock({
       id: existingBlock?.id ?? createDateScopedBlockId(normalizedInput.dateKey, Date.now()),
       employeeIds: existingBlock?.employeeIds ?? [],

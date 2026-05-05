@@ -129,12 +129,12 @@ export default function WeeklySchedulePage() {
   const handleCopyWeek = () => {
     const result = copyWeekSchedule(weekEntries[0]?.dateKey ?? formatDateKey());
     if (!result) {
-      setNotice('สัปดาห์นี้ยังไม่มีรอบงานให้คัดลอก');
+      setNotice('สัปดาห์นี้ยังไม่มีกะงานให้คัดลอก');
       return;
     }
 
     setWeekOffset((currentValue) => currentValue + 1);
-    setNotice(`คัดลอกรอบงาน ${result.copiedCount} รอบ ไปสัปดาห์ถัดไปแล้ว`);
+    setNotice(`คัดลอกกะงาน ${result.copiedCount} กะ ไปสัปดาห์ถัดไปแล้ว`);
   };
 
   const weekStartLabel = weekDates[0] ? formatThaiWeekLabel(weekDates[0]) : '-';
@@ -164,20 +164,20 @@ export default function WeeklySchedulePage() {
     >
       <section className="schedule-board-note panel-card compact-page-bar">
         <div className="compact-page-lead">
-          <strong>จัดตารางงานรายสัปดาห์ตามรอบงาน</strong>
-          <p>ดูว่าแต่ละวันมีรอบเช้า รอบสาย หรือรอบกำหนดเองกี่รอบ และรอบไหนยังขาดคนก่อนกลับไปจัดในตารางหลัก</p>
+          <strong>จัดตารางงานรายสัปดาห์ตามกะงาน</strong>
+          <p>ดูว่าแต่ละวันมีกะเช้าและกะสายครบหรือยัง พร้อมเช็กได้ทันทีว่ากะไหนยังขาดคนก่อนกลับไปจัดในตารางหลัก</p>
         </div>
         <div className="compact-page-stats">
-          <span className="compact-page-stat">รอบงานทั้งหมด {totalRounds}</span>
+          <span className="compact-page-stat">กะงานทั้งหมด {totalRounds}</span>
           <span className="compact-page-stat">พนักงานที่ลงงาน {scheduledEmployeeCount} คน</span>
-          <span className={`compact-page-stat ${shortageRounds ? 'danger' : 'ok'}`}>{shortageRounds ? `รอบที่ขาดคน ${shortageRounds} รอบ` : `จัดครบแล้ว ${filledRounds} รอบ`}</span>
+          <span className={`compact-page-stat ${shortageRounds ? 'danger' : 'ok'}`}>{shortageRounds ? `กะที่ขาดคน ${shortageRounds} กะ` : `จัดครบแล้ว ${filledRounds} กะ`}</span>
         </div>
       </section>
 
       <section className="panel-card weekly-schedule-toolbar">
         <div>
           <strong>กรองรายพนักงาน</strong>
-          <p>เลือกดูเฉพาะคนใดคนหนึ่งว่าอาทิตย์นี้ถูกจัดไว้ในรอบงานใดบ้าง</p>
+          <p>เลือกดูเฉพาะคนใดคนหนึ่งว่าอาทิตย์นี้ถูกจัดไว้ในกะงานใดบ้าง</p>
         </div>
         <div className="weekly-schedule-toolbar-controls">
           <select className="select-control" value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}>
@@ -193,14 +193,14 @@ export default function WeeklySchedulePage() {
         {weekEntries.map((day) => {
           const dayShortageCount = day.rounds.filter((entry) => entry.shortage > 0).length;
           const dayStatusClass = !day.rounds.length ? 'warning' : dayShortageCount ? 'danger' : 'ok';
-          const dayStatusLabel = !day.rounds.length ? 'ยังไม่จัดรอบงาน' : dayShortageCount ? `ขาด ${dayShortageCount} รอบ` : 'ครบแล้ว';
+          const dayStatusLabel = !day.rounds.length ? 'ยังไม่จัดกะงาน' : dayShortageCount ? `ขาด ${dayShortageCount} กะ` : 'ครบแล้ว';
 
           return (
             <article key={day.dateKey} className="panel-card weekly-schedule-day-card">
               <div className="weekly-schedule-day-head">
                 <div>
                   <strong>{day.label}</strong>
-                  <p>{day.rounds.length ? `${day.rounds.length} รอบงานในวันนี้` : employeeFilter !== 'all' ? 'ไม่มีรอบงานของพนักงานที่เลือก' : 'ยังไม่จัดรอบงานในวันนี้'}</p>
+                  <p>{day.rounds.length ? `${day.rounds.length} กะงานในวันนี้` : employeeFilter !== 'all' ? 'ไม่มีกะงานของพนักงานที่เลือก' : 'ยังไม่จัดกะงานในวันนี้'}</p>
                 </div>
                 <span className={`status-chip ${dayStatusClass}`}>{dayStatusLabel}</span>
               </div>
@@ -221,7 +221,7 @@ export default function WeeklySchedulePage() {
                       <span>{getRoundWorkingWindow(block)}</span>
                     </div>
                     <div className="weekly-schedule-round-duty">
-                      <strong>ชื่องาน / หน้าที่</strong>
+                      <strong>หน้าที่ในกะ</strong>
                       <p>{block.title}</p>
                     </div>
                     <div className={`weekly-schedule-round-employees ${assignedEmployees.length ? '' : 'empty'}`.trim()}>
@@ -230,14 +230,14 @@ export default function WeeklySchedulePage() {
                         : <span>{shortage ? 'ยังไม่มีคนลงรอบนี้' : 'รอบนี้ยังไม่มีรายชื่อพนักงาน'}</span>}
                     </div>
                     <div className="weekly-schedule-round-actions">
-                      <Link className="schedule-inline-link" to={routePaths.manageScheduleBlock} state={{ blockId: block.id, returnTo: routePaths.weeklySchedule, selectedDateKey: day.dateKey }}><PencilLine size={14} /> แก้ไขรอบงาน</Link>
+                      <Link className="schedule-inline-link" to={routePaths.manageScheduleBlock} state={{ blockId: block.id, returnTo: routePaths.weeklySchedule, selectedDateKey: day.dateKey }}><PencilLine size={14} /> แก้ไขกะงาน</Link>
                     </div>
                   </div>
-                )) : <div className="empty-card compact">{employeeFilter !== 'all' ? 'ไม่มีรอบงานสำหรับพนักงานที่เลือก' : 'ยังไม่จัดรอบงานในวันนี้'}</div>}
+                )) : <div className="empty-card compact">{employeeFilter !== 'all' ? 'ไม่มีกะงานสำหรับพนักงานที่เลือก' : 'ยังไม่จัดกะงานในวันนี้'}</div>}
               </div>
 
               <div className="weekly-schedule-day-footer">
-                <Link className="primary-inline" to={routePaths.manageScheduleBlock} state={{ selectedDateKey: day.dateKey, returnTo: routePaths.weeklySchedule }}><Plus size={14} /> เพิ่มรอบงาน</Link>
+                <Link className="primary-inline" to={routePaths.manageScheduleBlock} state={{ selectedDateKey: day.dateKey, returnTo: routePaths.weeklySchedule }}><Plus size={14} /> เพิ่มกะงาน</Link>
               </div>
             </article>
           );

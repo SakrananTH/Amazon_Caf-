@@ -308,7 +308,7 @@ export function HomePage() {
           <div className="panel-head">
             <div>
               <h3>กะที่กำลังจะถึง</h3>
-              <p>ดูรอบงานถัดไปพร้อมคนที่ลงจริงและเปิดตารางได้ทันที</p>
+              <p>ดูกะงานถัดไปพร้อมคนที่ลงจริงและเปิดตารางได้ทันที</p>
             </div>
             <Users size={18} className="panel-accent" />
           </div>
@@ -328,7 +328,7 @@ export function HomePage() {
                 <Link className="inline-action" to={routePaths.desktopSchedule}>เปิดตาราง</Link>
               </div>
             ))}
-            {!nextBlocks.length ? <div className="empty-card">ยังไม่มีรอบงานในระบบ</div> : null}
+            {!nextBlocks.length ? <div className="empty-card">ยังไม่มีกะงานในระบบ</div> : null}
           </div>
         </article>
         </section>
@@ -351,14 +351,14 @@ export function EmployeeHomePage() {
       <section className={`dashboard-priority-bar ${assignedBlocks.length ? 'is-clear' : 'is-critical'}`}>
         <div>
           <span className="priority-kicker">My day</span>
-          <strong>{currentEmployee ? `${currentEmployee.name} มีกะวันนี้ ${assignedBlocks.length} ช่วง` : 'ยังไม่มีข้อมูลพนักงานในระบบ'}</strong>
+          <strong>{currentEmployee ? `${currentEmployee.name} มีกะวันนี้ ${assignedBlocks.length} กะ` : 'ยังไม่มีข้อมูลพนักงานในระบบ'}</strong>
           <p>{nextBlock ? `กะถัดไปคือ ${nextBlock.time} • ${nextBlock.title}` : 'วันนี้ยังไม่มีกะที่ถูกมอบหมาย'}</p>
         </div>
         <Link className="ghost-button" to={routePaths.employeeRequests}>ดูคำขอของฉัน <ArrowRight size={16} /></Link>
       </section>
 
       <section className="dashboard-grid">
-        <MetricCard label="กะของฉันวันนี้" value={`${assignedBlocks.length} ช่วง`} note={nextBlock ? `เริ่มที่ ${nextBlock.time}` : 'ยังไม่มีกะ'} tone="coverage" />
+        <MetricCard label="กะของฉันวันนี้" value={`${assignedBlocks.length} กะ`} note={nextBlock ? `เริ่มที่ ${nextBlock.time}` : 'ยังไม่มีกะ'} tone="coverage" />
         <MetricCard label="งานที่ได้รับ" value={`${totalTasks} งาน`} note={currentEmployee ? `สำหรับ ${currentEmployee.role}` : 'รอข้อมูลพนักงาน'} tone="default" />
         <MetricCard label="คำขอล่าสุด" value={`${recentRequests.length} รายการ`} note={recentRequests[0] ? recentRequests[0].title : 'ยังไม่มีคำขอ'} tone={recentRequests.length ? 'positive' : 'default'} />
       </section>
@@ -380,7 +380,7 @@ export function EmployeeSchedulePage() {
       <section className="schedule-board-note panel-card compact-page-bar">
         <div className="compact-page-lead">
           <strong>มุมมองสำหรับพนักงาน</strong>
-          <p>ดูเฉพาะกะที่ได้รับมอบหมาย งานหลักของแต่ละช่วง และทีมที่ทำงานร่วมกัน</p>
+          <p>ดูเฉพาะกะที่ได้รับมอบหมาย งานหลักของแต่ละกะ และทีมที่ทำงานร่วมกัน</p>
         </div>
         <div className="compact-page-stats">
           <span className="compact-page-stat">กะทั้งหมด {assignedBlocks.length}</span>
@@ -394,7 +394,7 @@ export function EmployeeSchedulePage() {
           <div className="panel-head">
             <div>
               <h3>รายละเอียดกะของฉัน</h3>
-              <p>สรุปรอบงาน รายการงาน และสถานะในแต่ละรอบ</p>
+              <p>สรุปกะงาน รายการงาน และสถานะในแต่ละกะ</p>
             </div>
             <PencilLine size={18} className="panel-accent" />
           </div>
@@ -425,7 +425,7 @@ export function EmployeeSchedulePage() {
           <div className="panel-head">
             <div>
               <h3>ทีมที่ทำงานร่วมกัน</h3>
-              <p>ดูเพื่อนร่วมกะจากรอบงานที่คุณได้รับมอบหมาย</p>
+              <p>ดูเพื่อนร่วมกะจากกะงานที่คุณได้รับมอบหมาย</p>
             </div>
             <Users size={18} className="panel-accent" />
           </div>
@@ -1859,7 +1859,7 @@ export function SettingsPage() {
 
             <label className="checkbox-row">
               <input type="checkbox" name="notificationsEnabled" checked={formState.notificationsEnabled} onChange={handleChange} />
-              <span>เปิดการแจ้งเตือนเมื่อรอบงานใดคนไม่ครบ</span>
+              <span>เปิดการแจ้งเตือนเมื่อกะงานใดคนไม่ครบ</span>
             </label>
 
             <label className="checkbox-row">

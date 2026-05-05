@@ -80,7 +80,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
     }
 
     setDayOffset((currentValue) => currentValue + 1);
-    setCopyNotice(`คัดลอกตาราง ${result.copiedCount} ช่วง ไปวันถัดไปแล้ว`);
+    setCopyNotice(`คัดลอกตาราง ${result.copiedCount} กะ ไปวันถัดไปแล้ว`);
   };
 
   return (
@@ -115,7 +115,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
             <Copy size={16} /> คัดลอกวันถัดไป
           </button>
           <button type="button" className="primary-inline" onClick={() => navigate(routePaths.manageScheduleBlock, { state: { returnTo: routePaths.desktopSchedule, selectedDateKey: boardDateKey } })}>
-            <Plus size={16} /> เพิ่มรอบงาน
+            <Plus size={16} /> เพิ่มกะงาน
           </button>
         </div>
       }
@@ -125,8 +125,8 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
 
         <div className="schedule-board-note panel-card compact-page-bar">
           <div className="compact-page-lead">
-            <strong>จัดการตารางตามรอบงาน</strong>
-            <p>ลากชื่อพนักงานข้ามคอลัมน์เพื่อย้ายรอบ คลิกชื่อเพื่อนำออก และดูได้ทันทีว่ารอบไหนครบคนหรือยังขาดคน</p>
+            <strong>จัดการตารางตามกะงาน</strong>
+            <p>แต่ละวันจะมีกะเช้าและกะสายเท่านั้น ลากชื่อพนักงานเพื่อย้ายกะและเช็กได้ทันทีว่ากะไหนยังขาดคน</p>
           </div>
           <div className="compact-page-stats">
             <span className="compact-page-stat">Coverage {coverageRate}%</span>
@@ -136,12 +136,12 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
             <span className={`compact-page-stat ${personalLeaveEmployees.length ? 'warning' : ''}`}>ลากิจ {personalLeaveEmployees.length} คน</span>
             <span className={`compact-page-stat ${sickLeaveEmployees.length ? 'warning' : ''}`}>ลาป่วย {sickLeaveEmployees.length} คน</span>
             <span className={`compact-page-stat ${absentEmployees.length ? 'danger' : ''}`}>ขาด {absentEmployees.length} คน</span>
-            <span className={`compact-page-stat ${shortageBlocks.length ? 'danger' : 'ok'}`}>{shortageBlocks.length ? `ขาด ${shortageBlocks.length} รอบ` : 'ครบทุกรอบ'}</span>
+            <span className={`compact-page-stat ${shortageBlocks.length ? 'danger' : 'ok'}`}>{shortageBlocks.length ? `ขาด ${shortageBlocks.length} กะ` : 'ครบทุกกะ'}</span>
           </div>
         </div>
 
         <div className="schedule-helper-inline">
-          <span>ลากชื่อพนักงานเพื่อย้ายรอบได้ทันที</span>
+          <span>ลากชื่อพนักงานเพื่อย้ายกะได้ทันที</span>
           <span>ปุ่มเพิ่มอัตโนมัติจะเลือกเฉพาะคนที่พร้อมลงกะ และเรียงตามบทบาทงานก่อน</span>
         </div>
 
@@ -182,13 +182,13 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
                   <div className="col-curr-text">จัดแล้ว {assigned} คน • วางชื่อ {scheduled} คน{shortage ? ` • ขาดอีก ${shortage} คน` : ''}</div>
                   {annualLeaveCount || personalLeaveCount || sickLeaveCount || absentCount ? <div className="schedule-attendance-summary">ลา {annualLeaveCount} • กิจ {personalLeaveCount} • ป่วย {sickLeaveCount} • ขาด {absentCount}</div> : null}
                   <button type="button" className="schedule-inline-link" onClick={() => navigate(routePaths.manageScheduleBlock, { state: { blockId: block.id, returnTo: routePaths.desktopSchedule, selectedDateKey: boardDateKey } })}>
-                    <PencilLine size={14} /> แก้ไขรอบงาน
+                    <PencilLine size={14} /> แก้ไขกะงาน
                   </button>
                 </div>
 
                 <div className="col-body">
                   <div className="task-section">
-                    <p className="section-label">หน้าที่ในรอบ</p>
+                    <p className="section-label">หน้าที่ในกะ</p>
                     <ul className="task-list">
                       {block.tasks.map((task) => <li key={task}>{task}</li>)}
                     </ul>
@@ -230,7 +230,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
                           onClick={() => navigate(routePaths.removeEmployee, { state: { blockId: block.id, employeeId: id, selectedDateKey: boardDateKey, returnTo: routePaths.desktopSchedule } })}
                         />
                       ))}
-                      {!block.employeeIds.length ? <div className="empty-card compact">ยังไม่มีพนักงานในรอบนี้</div> : null}
+                      {!block.employeeIds.length ? <div className="empty-card compact">ยังไม่มีพนักงานในกะนี้</div> : null}
                     </div>
 
                     <div className="schedule-column-actions">
@@ -239,7 +239,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
                         className="add-employee-btn"
                         onClick={() => navigate(routePaths.addEmployee, { state: { blockId: block.id, selectedDateKey: boardDateKey, returnTo: routePaths.desktopSchedule } })}
                       >
-                        <Plus size={16} /> เพิ่มคนในรอบ
+                        <Plus size={16} /> เพิ่มคนในกะ
                       </button>
                       {shortage ? <button type="button" className="ghost-button schedule-auto-fill-btn" disabled={!availableForAuto} onClick={() => autoAssignEmployeesToBlock(block.id, boardDateKey)}>{availableForAuto ? 'เพิ่มอัตโนมัติ' : 'ไม่มีคนให้เพิ่ม'}</button> : null}
                     </div>
@@ -248,7 +248,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
               </article>
             );
           })}
-          {!dateBlocks.length ? <div className="empty-card">วันนี้ยังไม่มีรอบงานในตาราง สามารถเพิ่มรอบงานของวันที่เลือกได้ทันที</div> : null}
+          {!dateBlocks.length ? <div className="empty-card">วันนี้ยังไม่มีกะงานในตาราง สามารถเพิ่มกะงานของวันที่เลือกได้ทันที</div> : null}
         </div>
       </section>
     </DesktopWorkspace>

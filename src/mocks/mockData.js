@@ -49,11 +49,8 @@ export const calendarDaySettings = {
 };
 
 export const timeBlocks = [
-  { id: 1, time: '06:30 - 09:30', title: 'เปิดร้าน', required: 2, status: 'ok', tasks: ['เปิดร้าน', 'เปิดเครื่องกาแฟ', 'เตรียมวัตถุดิบ', 'ส่งงานมาตรฐาน'], employeeIds: [1, 4] },
-  { id: 2, time: '10:00', title: 'เช็ดโต๊ะ', required: 1, status: 'ok', tasks: ['เช็ดโต๊ะ', 'กวาดร้าน'], employeeIds: [3, 5] },
-  { id: 3, time: '13:00', title: 'เติมน้ำแข็ง', required: 1, status: 'ok', tasks: ['เติมน้ำแข็ง', 'เช็ดโต๊ะ', 'ดูร้าน'], employeeIds: [2, 5] },
-  { id: 4, time: '14:00 - 16:00', title: 'เติมนม', required: 1, status: 'ok', tasks: ['เติมนม', 'เช็คสต็อก', 'เตรียมวัตถุดิบ'], employeeIds: [3] },
-  { id: 5, time: '17:00 - 17:30', title: 'เช็คปิดร้าน', required: 2, status: 'ok', tasks: ['ทำความสะอาดเครื่อง', 'เช็คสต็อก', 'เช็คปิดร้าน'], employeeIds: [1, 2, 4] }
+  { id: 1, time: '06:30 - 16:30', title: 'หน้าที่ในกะเช้า', required: 2, status: 'ok', tasks: ['เปิดร้าน', 'เตรียมวัตถุดิบ', 'ดูแลหน้าร้าน'], employeeIds: [1, 5] },
+  { id: 2, time: '07:30 - 17:30', title: 'หน้าที่ในกะสาย', required: 2, status: 'ok', tasks: ['ดูแลหน้าร้าน', 'เช็กสต็อก', 'ปิดร้าน'], employeeIds: [2, 3] }
 ];
 
 export const requests = [

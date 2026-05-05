@@ -204,7 +204,7 @@ function RequestHelpPage() {
     <ManagerDesktopGate>
 	  <div className="screen-stage standalone-modal">
         <RequestHelp
-          defaultDetail={location.state?.defaultDetail ?? (block ? `รอบงาน ${block.time}\nหน้าที่หลัก: ${block.title}\nขาดพนักงาน ${shortage} คน` : '')}
+          defaultDetail={location.state?.defaultDetail ?? (block ? `กะงาน ${block.time}\nหน้าที่หลัก: ${block.title}\nขาดพนักงาน ${shortage} คน` : '')}
           defaultType={location.state?.defaultType ?? 'ขอพนักงานเพิ่ม'}
           onClose={() => navigate(returnTo)}
           onSubmit={createRequest}
@@ -235,7 +235,7 @@ function ScheduleBlockPage() {
               return '';
             }
 
-            return block ? `อัปเดต ${updatedBlock.roundLabel} ${updatedBlock.time} • ${updatedBlock.title} แล้ว` : `เพิ่มรอบ ${updatedBlock.roundLabel} ${updatedBlock.time} • ${updatedBlock.title} แล้ว`;
+            return block ? `อัปเดต ${updatedBlock.roundLabel} ${updatedBlock.time} • ${updatedBlock.title} แล้ว` : `เพิ่มกะ ${updatedBlock.roundLabel} ${updatedBlock.time} • ${updatedBlock.title} แล้ว`;
           }}
         />
 	  </div>
@@ -348,7 +348,7 @@ export const screenCatalog = [
     id: 'weekly-schedule',
     path: routePaths.weeklySchedule,
     title: 'เวลาเข้างาน',
-    description: 'มุมมองรายสัปดาห์สำหรับดู แก้ไข และลบช่วงงาน',
+    description: 'มุมมองรายสัปดาห์สำหรับดู แก้ไข และลบกะงาน',
     component: WeeklyScheduleRoutePage,
   },
   {
@@ -383,7 +383,7 @@ export const screenCatalog = [
     id: 'manage-schedule-block',
     path: routePaths.manageScheduleBlock,
     title: 'จัดการข้อมูลงาน',
-    description: 'ฟอร์มสร้างและแก้ไขรอบงานในตาราง',
+    description: 'ฟอร์มสร้างและแก้ไขกะงานในตาราง',
     component: ScheduleBlockPage,
   },
   {
@@ -397,14 +397,14 @@ export const screenCatalog = [
     id: 'add-employee',
     path: routePaths.addEmployee,
     title: 'เพิ่มพนักงาน',
-    description: 'หน้าสำหรับเลือกและเพิ่มพนักงานเข้ารอบงาน',
+    description: 'หน้าสำหรับเลือกและเพิ่มพนักงานเข้ากะงาน',
     component: AddEmployeePage,
   },
   {
     id: 'remove-employee',
     path: routePaths.removeEmployee,
     title: 'นำพนักงานออก',
-    description: 'หน้า confirm ก่อนนำพนักงานออกจากรอบงาน',
+    description: 'หน้า confirm ก่อนนำพนักงานออกจากกะงาน',
     component: RemoveEmployeePage,
   },
   {
@@ -439,7 +439,7 @@ export const screenCatalog = [
     id: 'reports',
     path: routePaths.reports,
     title: 'รายงาน',
-    description: 'สรุป coverage และสถานะกำลังคนรายรอบงาน',
+    description: 'สรุป coverage และสถานะกำลังคนรายกะงาน',
     component: ReportsRoutePage,
   },
   {

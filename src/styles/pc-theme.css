@@ -4441,6 +4441,28 @@ a, button {
   color: var(--text-muted);
 }
 
+.employee-duty-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.shift-duty-chip {
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  background: #ffffff;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shift-duty-chip.selected {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: var(--success-text);
+}
+
 .flow-submit {
   min-width: 180px;
 }
@@ -5086,6 +5108,17 @@ a, button {
   font-size: 13px;
 }
 
+.employee-mobile-hero-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f0fdf4;
+  border: 1px solid #d1fae5;
+  color: var(--success-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .employee-mobile-hero-card.sales {
   background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%);
 }
@@ -5657,6 +5690,48 @@ a, button {
 
 .employee-mobile-week-list.empty span,
 .employee-mobile-leave-list.empty span {
+  color: var(--text-muted);
+}
+
+.employee-mobile-schedule-list {
+  display: grid;
+  gap: 10px;
+}
+
+.employee-mobile-schedule-item {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: #f8fafc;
+  text-align: left;
+  color: inherit;
+  box-shadow: 0 10px 24px -22px rgba(15, 23, 42, 0.22);
+}
+
+.employee-mobile-schedule-item.expanded {
+  border-color: rgba(30, 112, 69, 0.26);
+  box-shadow: 0 16px 30px -24px rgba(15, 23, 42, 0.28);
+}
+
+.employee-mobile-schedule-item:focus-visible {
+  outline: 2px solid rgba(30, 112, 69, 0.24);
+  outline-offset: 2px;
+}
+
+.employee-mobile-schedule-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.employee-mobile-schedule-item-head p,
+.employee-mobile-schedule-item-summary span {
+  margin: 0;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
