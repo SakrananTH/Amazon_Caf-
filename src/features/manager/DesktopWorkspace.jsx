@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart3, Bell, CalendarDays, CheckCircle2, ChevronDown, Home, LogOut, Settings, Users, X } from 'lucide-react';
+import { BarChart3, Bell, CalendarDays, ChevronDown, Home, LogOut, Settings, Users, X } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { routePaths } from '../../app/routes.js';
 import { useAppState } from '../../app/state/AppStateContext.jsx';
@@ -9,7 +9,6 @@ export const managerNavItems = [
   { label: 'ตารางงาน', icon: CalendarDays, to: routePaths.desktopSchedule },
   { label: 'พนักงาน', icon: Users, to: routePaths.employees },
   { label: 'แจ้งเตือน', icon: Bell, to: routePaths.myRequests },
-  { label: 'ประวัติแจ้งเตือน', icon: CheckCircle2, to: routePaths.requestHistory },
   { label: 'รายงาน', icon: BarChart3, to: routePaths.reports },
   { label: 'ตั้งค่า', icon: Settings, to: routePaths.settings },
 ];

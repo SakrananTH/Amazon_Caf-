@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BarChart3, Bell, Clock3, Copy, Eye, EyeOff, LogIn, LockKeyhole, PackageSearch, PencilLine, ShieldCheck, Smartphone, Store, TriangleAlert, UserPlus2, Users, UserX } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import DesktopWorkspace, { employeeNavItems } from './DesktopWorkspace.jsx';
-import EmployeeChip, { employeeChipLegendItems, employeeRoleOptions, getRoleClassName } from '../shared/EmployeeChip.jsx';
+import EmployeeChip, { buildRoleMetadataSkills, employeeChipLegendItems, employeeRoleOptions, getRoleClassName, getRolePresentation, stripRoleMetadataSkills } from '../shared/EmployeeChip.jsx';
 import { MAX_EMPLOYEES, computeBlockStatus, employeeAvailabilityOptions, formatDateKey, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeScheduleEligible, useAppState } from '../../app/state/AppStateContext.jsx';
 import { routePaths } from '../../app/routes.js';
 
@@ -177,6 +177,8 @@ function createEmployeeDraft() {
   return {
     name: '',
     role: 'บาริสต้า',
+    roleTone: 'chip-role-barista',
+    roleHint: 'เครื่องดื่ม',
     phone: '',
     employeeCode: '',
     password: '',
@@ -448,6 +450,8 @@ export function EmployeesPage() {
   const [saveMessage, setSaveMessage] = useState('');
   const [copyMessage, setCopyMessage] = useState('');
   const [showEmployeePassword, setShowEmployeePassword] = useState(false);
+  const [isRoleEditorOpen, setIsRoleEditorOpen] = useState(false);
+  const roleTitleInputRef = useRef(null);
 
   const filteredEmployees = useMemo(() => employees.filter((employee) => {
     const matchesQuery = query.trim() ? `${employee.name} ${employee.role} ${employee.phone} ${employee.employeeCode ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()) : true;
@@ -459,6 +463,15 @@ export function EmployeesPage() {
   const selectedEmployee = employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
   const assignmentsForEmployee = (employeeId) => getTimeBlocksForDate(timeBlocks, formatDateKey()).filter((block) => block.employeeIds.includes(employeeId));
   const selectedAssignments = selectedEmployee ? assignmentsForEmployee(selectedEmployee.id) : [];
+  const activeRoleOption = useMemo(() => {
+    return employeeRoleOptions.find((option) => option.className === String(formState.roleTone ?? '').trim())
+      ?? employeeRoleOptions.find((option) => option.value === formState.role)
+      ?? employeeRoleOptions.find((option) => option.className === getRoleClassName(formState.role))
+      ?? null;
+  }, [formState.role, formState.roleTone]);
+  const currentRoleLabel = String(formState.role ?? '').trim();
+  const currentRoleHint = String(formState.roleHint ?? '').trim();
+  const currentRoleClassName = String(formState.roleTone ?? '').trim() || getRoleClassName(formState.role);
 
   useEffect(() => {
     if (mode === 'create') {
@@ -472,14 +485,17 @@ export function EmployeesPage() {
     }
 
     if (selectedEmployee) {
+      const rolePresentation = getRolePresentation(selectedEmployee.role, selectedEmployee.skills);
       setFormState({
         name: selectedEmployee.name,
         role: selectedEmployee.role,
+        roleTone: rolePresentation.className,
+        roleHint: rolePresentation.hint,
         phone: selectedEmployee.phone,
         employeeCode: selectedEmployee.employeeCode ?? '',
         password: selectedEmployee.password ?? selectedEmployee.employeeCode ?? '',
         avatar: selectedEmployee.avatar,
-        skillsText: (selectedEmployee.skills ?? []).join(', '),
+        skillsText: stripRoleMetadataSkills(selectedEmployee.skills).join(', '),
         availabilityStatus: selectedEmployee.availabilityStatus ?? 'ready',
         active: selectedEmployee.active,
       });
@@ -505,6 +521,36 @@ export function EmployeesPage() {
     setShowEmployeePassword(false);
   }, [mode, selectedEmployeeId]);
 
+  useEffect(() => {
+    setIsRoleEditorOpen(false);
+  }, [mode, selectedEmployeeId]);
+
+  useEffect(() => {
+    if (!isRoleEditorOpen) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      roleTitleInputRef.current?.focus();
+      roleTitleInputRef.current?.select();
+    });
+  }, [isRoleEditorOpen]);
+
+  useEffect(() => {
+    if (!isRoleEditorOpen) {
+      return undefined;
+    }
+
+    const handleEscapeKey = (event) => {
+      if (event.key === 'Escape') {
+        setIsRoleEditorOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => window.removeEventListener('keydown', handleEscapeKey);
+  }, [isRoleEditorOpen]);
+
   const handleChange = (event) => {
     const { checked, name, type, value } = event.target;
     setFormState((currentState) => ({
@@ -513,9 +559,40 @@ export function EmployeesPage() {
     }));
   };
 
+  const handleRolePresetSelect = (option) => {
+    setFormState((currentState) => {
+      const currentOption = employeeRoleOptions.find((entry) => entry.className === String(currentState.roleTone ?? '').trim())
+        ?? employeeRoleOptions.find((entry) => entry.value === currentState.role)
+        ?? null;
+      const isSameTone = currentOption?.className === option.className;
+
+      return {
+        ...currentState,
+        role: isSameTone && String(currentState.role ?? '').trim() ? currentState.role : option.label,
+        roleTone: option.className,
+        roleHint: isSameTone && String(currentState.roleHint ?? '').trim() ? currentState.roleHint : option.detailLabel,
+      };
+    });
+  };
+
+  const handleRoleToneSelect = (option) => {
+    setFormState((currentState) => ({
+      ...currentState,
+      role: String(currentState.role ?? '').trim() ? currentState.role : option.label,
+      roleTone: option.className,
+      roleHint: String(currentState.roleHint ?? '').trim() ? currentState.roleHint : option.detailLabel,
+    }));
+  };
+
   const normalizePayload = () => ({
     ...formState,
-    skills: formState.skillsText.split(',').map((skill) => skill.trim()).filter(Boolean),
+    role: String(formState.role ?? '').trim(),
+    roleTone: String(formState.roleTone ?? '').trim(),
+    roleHint: String(formState.roleHint ?? '').trim(),
+    skills: buildRoleMetadataSkills(formState.skillsText.split(',').map((skill) => skill.trim()).filter(Boolean), {
+      toneClassName: formState.roleTone,
+      hint: formState.roleHint,
+    }),
   });
 
   const handleSubmit = (event) => {
@@ -636,6 +713,7 @@ export function EmployeesPage() {
             <div>
               <h3>รายชื่อพนักงาน</h3>
               <p>ร้านนี้กำหนดพนักงานได้สูงสุด {MAX_EMPLOYEES} คน</p>
+              <small className="employee-list-helper">เลือกพนักงานจากรายการเพื่อเปิดโหมดแก้ไขทางด้านขวา</small>
             </div>
             <span className="list-summary">{filteredEmployees.length} คน</span>
           </div>
@@ -667,7 +745,13 @@ export function EmployeesPage() {
                       <small>{assignments.length ? `กะ ${assignments.length}` : 'ยังไม่ลงกะ'}</small>
                     </span>
                   </span>
-                  <span className={`status-chip ${availabilityMeta.tone}`}>{availabilityMeta.label}</span>
+                  <span className="employee-list-actions">
+                    <span className={`employee-list-edit-pill ${isSelected ? 'selected' : ''}`}>
+                      <PencilLine size={12} />
+                      {isSelected ? 'กำลังแก้ไข' : 'แก้ไข'}
+                    </span>
+                    <span className={`status-chip ${availabilityMeta.tone}`}>{availabilityMeta.label}</span>
+                  </span>
                 </button>
               );
             })}
@@ -706,20 +790,27 @@ export function EmployeesPage() {
                     </label>
                   </div>
 
-                  <label className="field-group employee-role-field-group">
+                  <div className="field-group employee-role-field-group">
                     <span>บทบาทพร้อมสีแนะนำ</span>
-                    <select className="text-input" name="role" value={formState.role} onChange={handleChange}>
-                      {employeeRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label} • {option.hint}</option>)}
-                    </select>
+                    <div className="employee-role-summary-shell">
+                      <div className="employee-role-summary-card">
+                        <span className={`chip ${currentRoleClassName} employee-role-chip`}>{currentRoleLabel || 'ยังไม่ได้ตั้งหัวข้อ'}</span>
+                        <small>{`${activeRoleOption?.toneLabel ?? 'โทนทั่วไป'} • ${currentRoleHint || activeRoleOption?.detailLabel || 'เพิ่มคำอธิบายให้บทบาทนี้'}`}</small>
+                      </div>
+                      <button type="button" className="ghost-button employee-role-open-button" onClick={() => setIsRoleEditorOpen(true)}>
+                        <PencilLine size={15} /> ปรับแต่งบทบาท
+                      </button>
+                    </div>
+                    <small className="employee-role-helper">เลือกกล่องด้านล่างเพื่อใช้เป็นต้นแบบ แล้วค่อยกดปุ่มปรับแต่งบทบาทเมื่ออยากแก้ชื่อหรือโทนสีเพิ่มเติม</small>
                     <div className="employee-role-preset-list">
                       {employeeRoleOptions.map((option) => (
-                        <button key={option.value} type="button" className={`employee-role-preset ${formState.role === option.value ? 'selected' : ''}`} onClick={() => setFormState((currentState) => ({ ...currentState, role: option.value }))}>
-                          <span className={`chip ${formState.role === option.value ? getRoleClassName(formState.role) : option.className} employee-role-chip`}>{option.label}</span>
+                        <button key={option.value} type="button" className={`employee-role-preset ${activeRoleOption?.className === option.className ? 'selected' : ''}`} onClick={() => handleRolePresetSelect(option)}>
+                          <span className={`chip ${activeRoleOption?.className === option.className ? currentRoleClassName : option.className} employee-role-chip`}>{option.label}</span>
                           <small>{option.hint}</small>
                         </button>
                       ))}
                     </div>
-                  </label>
+                  </div>
                 </section>
 
                 <section className="employee-profile-side">
@@ -835,6 +926,79 @@ export function EmployeesPage() {
             {mode === 'edit' ? <button type="button" className="danger-inline" onClick={handleDelete}><UserX size={16} /> ลบพนักงาน</button> : null}
           </div>
 
+          {isRoleEditorOpen ? (
+            <div className="employee-role-dialog-backdrop" role="presentation" onClick={() => setIsRoleEditorOpen(false)}>
+              <section className="employee-role-dialog-card" role="dialog" aria-modal="true" aria-labelledby="employee-role-dialog-title" onClick={(event) => event.stopPropagation()}>
+                <div className="employee-role-dialog-head">
+                  <div className="employee-role-dialog-title-wrap">
+                    <span className="employee-role-dialog-kicker">Role Styling</span>
+                    <strong id="employee-role-dialog-title">แก้ไขบทบาทพนักงาน</strong>
+                    <p>จัดชื่อหัวข้อ โทนสี และคำอธิบายให้เป็นระเบียบมากขึ้นในหน้าต่างเดียว</p>
+                  </div>
+                  <button type="button" className="ghost-button employee-role-editor-close" onClick={() => setIsRoleEditorOpen(false)}>ปิด</button>
+                </div>
+
+                <div className="employee-role-dialog-layout">
+                  <div className="employee-role-dialog-main">
+                    <div className="employee-role-editor-preview employee-role-editor-preview--modal">
+                      <span className={`chip ${currentRoleClassName} employee-role-chip`}>{currentRoleLabel || 'ยังไม่ได้ตั้งหัวข้อ'}</span>
+                      <small>{`${activeRoleOption?.toneLabel ?? 'โทนทั่วไป'} • ${currentRoleHint || activeRoleOption?.detailLabel || 'คำอธิบายบทบาท'}`}</small>
+                    </div>
+
+                    <div className="employee-role-editor-grid">
+                      <label className="field-group">
+                        <span>หัวข้อ</span>
+                        <input
+                          ref={roleTitleInputRef}
+                          className="text-input"
+                          name="role"
+                          value={formState.role}
+                          onChange={handleChange}
+                          placeholder="พิมพ์ชื่อบทบาท เช่น หัวหน้าบาริสต้า"
+                        />
+                      </label>
+
+                      <label className="field-group">
+                        <span>คำอธิบายใต้หัวข้อ</span>
+                        <input
+                          className="text-input"
+                          name="roleHint"
+                          value={formState.roleHint}
+                          onChange={handleChange}
+                          placeholder="เช่น เครื่องดื่ม หรือ ดูแลหน้าร้าน"
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <aside className="employee-role-dialog-side">
+                    <div className="employee-role-tone-strip employee-role-tone-strip--modal">
+                      <span>โทนสี</span>
+                      <div className="employee-role-tone-options">
+                        {employeeRoleOptions.map((option) => (
+                          <button key={`${option.value}-tone`} type="button" className={`employee-role-tone-option ${currentRoleClassName === option.className ? 'selected' : ''}`} onClick={() => handleRoleToneSelect(option)}>
+                            <span className={`chip ${option.className} employee-role-chip`}>{option.toneLabel}</span>
+                            <small>{option.detailLabel}</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="employee-role-dialog-note">
+                      <strong>วิธีใช้งาน</strong>
+                      <p>เลือกโทนสีที่ใกล้เคียงก่อน แล้วค่อยปรับหัวข้อและคำอธิบายให้เหมาะกับตำแหน่งจริงของพนักงาน</p>
+                    </div>
+                  </aside>
+                </div>
+
+                <div className="employee-role-dialog-actions">
+                  <button type="button" className="ghost-button" onClick={() => setIsRoleEditorOpen(false)}>ปิดหน้าต่าง</button>
+                  <button type="button" className="primary-inline" onClick={() => setIsRoleEditorOpen(false)}>ใช้ค่าชุดนี้</button>
+                </div>
+              </section>
+            </div>
+          ) : null}
+
           {saveMessage ? <div className="form-success top-spaced"><span>{saveMessage}</span></div> : null}
         </form>
       </section>
@@ -842,11 +1006,11 @@ export function EmployeesPage() {
   );
 }
 
-export function ManagerNotificationsPage({ view = 'active' }) {
+export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
   const { inventoryItems, issueReports, updateIssueReport } = useAppState();
-  const [alertFilter, setAlertFilter] = useState('all');
+  const [alertFilter, setAlertFilter] = useState(initialFilter);
   const [alertQuery, setAlertQuery] = useState('');
-  const isHistoryView = view === 'history';
+  const isHistoryFilter = alertFilter === 'history';
 
   const issueAlerts = useMemo(() => [...issueReports]
     .sort((leftIssue, rightIssue) => {
@@ -908,12 +1072,9 @@ export function ManagerNotificationsPage({ view = 'active' }) {
       };
     }), [inventoryItems]);
 
-  const allAlerts = useMemo(() => {
+  const sortAlerts = (sourceAlerts) => {
     const toneWeight = { danger: 3, warning: 2, ok: 1 };
     const kindWeight = { issue: 2, stock: 1 };
-    const sourceAlerts = isHistoryView
-      ? resolvedIssueAlerts
-      : [...activeIssueAlerts, ...lowStockAlerts];
 
     return [...sourceAlerts].sort((leftAlert, rightAlert) => {
       const toneDiff = (toneWeight[rightAlert.tone] ?? 0) - (toneWeight[leftAlert.tone] ?? 0);
@@ -928,7 +1089,10 @@ export function ManagerNotificationsPage({ view = 'active' }) {
 
       return String(leftAlert.title).localeCompare(String(rightAlert.title), 'th');
     });
-  }, [activeIssueAlerts, isHistoryView, lowStockAlerts, resolvedIssueAlerts]);
+  };
+
+  const currentAlerts = useMemo(() => sortAlerts([...activeIssueAlerts, ...lowStockAlerts]), [activeIssueAlerts, lowStockAlerts]);
+  const historyAlerts = useMemo(() => sortAlerts(resolvedIssueAlerts), [resolvedIssueAlerts]);
 
   const openIssues = useMemo(() => issueReports.filter((issue) => issue.status !== 'ดำเนินการแล้ว'), [issueReports]);
   const pendingIssues = useMemo(() => issueReports.filter((issue) => issue.status === 'รอดำเนินการ'), [issueReports]);
@@ -936,34 +1100,33 @@ export function ManagerNotificationsPage({ view = 'active' }) {
   const highSeverityIssues = useMemo(() => openIssues.filter((issue) => issue.severity === 'สูง'), [openIssues]);
   const resolvedIssues = useMemo(() => issueReports.filter((issue) => issue.status === 'ดำเนินการแล้ว'), [issueReports]);
   const resolvedHighSeverityIssues = useMemo(() => resolvedIssues.filter((issue) => issue.severity === 'สูง'), [resolvedIssues]);
-  const filterTabs = isHistoryView
-    ? [
-      { value: 'all', label: 'ทั้งหมด' },
-      { value: 'urgent', label: 'ด่วน' },
-      { value: 'issues', label: 'ปิดแล้ว' },
-    ]
-    : [
-      { value: 'all', label: 'ทั้งหมด' },
-      { value: 'urgent', label: 'ด่วน' },
-      { value: 'issues', label: 'ปัญหา' },
-      { value: 'stock', label: 'สต็อกต่ำ' },
-    ];
+  const filterTabs = [
+    { value: 'all', label: 'ทั้งหมด' },
+    { value: 'urgent', label: 'ด่วน' },
+    { value: 'issues', label: 'ปัญหา' },
+    { value: 'stock', label: 'สต็อกต่ำ' },
+    { value: 'history', label: 'ประวัติ' },
+  ];
 
   const filteredAlerts = useMemo(() => {
     const baseAlerts = (() => {
+      if (alertFilter === 'history') {
+        return historyAlerts;
+      }
+
       if (alertFilter === 'urgent') {
-        return allAlerts.filter((alert) => alert.tone === 'danger');
+        return currentAlerts.filter((alert) => alert.tone === 'danger');
       }
 
       if (alertFilter === 'issues') {
-        return allAlerts.filter((alert) => alert.kind === 'issue');
+        return currentAlerts.filter((alert) => alert.kind === 'issue');
       }
 
-      if (!isHistoryView && alertFilter === 'stock') {
-        return allAlerts.filter((alert) => alert.kind === 'stock');
+      if (alertFilter === 'stock') {
+        return currentAlerts.filter((alert) => alert.kind === 'stock');
       }
 
-      return allAlerts;
+      return currentAlerts;
     })();
 
     const normalizedQuery = alertQuery.trim().toLowerCase();
@@ -972,36 +1135,34 @@ export function ManagerNotificationsPage({ view = 'active' }) {
     }
 
     return baseAlerts.filter((alert) => `${alert.title} ${alert.detail} ${alert.action} ${alert.extraDetail} ${alert.reporter ?? ''}`.toLowerCase().includes(normalizedQuery));
-  }, [alertFilter, alertQuery, allAlerts, isHistoryView]);
+  }, [alertFilter, alertQuery, currentAlerts, historyAlerts]);
 
   const handleIssueStatus = (issueId, status) => {
     updateIssueReport(issueId, { status });
   };
 
-  const pageTitle = isHistoryView ? 'ประวัติแจ้งเตือน' : 'แจ้งเตือน';
-  const panelTitle = isHistoryView ? 'ประวัติแจ้งเตือนเก่า' : 'สิ่งที่ต้องดูตอนนี้';
-  const panelDescription = isHistoryView
+  const panelTitle = isHistoryFilter ? 'ประวัติแจ้งเตือนเก่า' : 'สิ่งที่ต้องดูตอนนี้';
+  const panelDescription = isHistoryFilter
     ? 'ดูรายการปัญหาที่ปิดงานแล้วและค้นย้อนหลังได้จากหน้าเดียว'
     : 'กรอง ค้นหา และติดตามทั้งปัญหากับรายการสต็อกต่ำได้จากหน้าเดียว';
-  const shellTitle = isHistoryView ? 'คลังประวัติแจ้งเตือน' : 'ศูนย์แจ้งเตือนร้าน';
-  const shellDescription = isHistoryView
+  const shellTitle = isHistoryFilter ? 'คลังประวัติแจ้งเตือน' : 'ศูนย์แจ้งเตือนร้าน';
+  const shellDescription = isHistoryFilter
     ? 'รวมรายการที่ปิดงานแล้วเพื่อย้อนดูบริบทเดิมได้ โดยไม่ปะปนกับงานค้างปัจจุบัน'
     : 'รวมปัญหาที่พนักงานแจ้งและสต็อกที่ต่ำกว่าจุดเตือน เพื่อให้ผู้จัดการติดตามงานจากหน้าเดียว';
-  const headerAction = isHistoryView
-    ? <Link className="ghost-button" to={routePaths.myRequests}>กลับไปศูนย์แจ้งเตือน</Link>
-    : <Link className="ghost-button" to={routePaths.requestHistory}>ประวัติแจ้งเตือนเก่า</Link>;
+  const visibleAlerts = isHistoryFilter ? historyAlerts : currentAlerts;
 
   return (
-    <DesktopWorkspace title={pageTitle} headerActions={headerAction}>
+    <DesktopWorkspace title="แจ้งเตือน" contentClassName="desktop-content--notifications-fixed">
+      <div className="notification-page">
       <section className="schedule-board-note panel-card compact-page-bar">
         <div className="compact-page-lead">
           <strong>{shellTitle}</strong>
           <p>{shellDescription}</p>
         </div>
         <div className="compact-page-stats">
-          <span className={`compact-page-stat ${isHistoryView ? (resolvedIssues.length ? 'ok' : 'warning') : (openIssues.length ? 'danger' : 'ok')}`}>{isHistoryView ? `ปิดงานแล้ว ${resolvedIssues.length}` : `ปัญหาค้าง ${openIssues.length}`}</span>
-          <span className={`compact-page-stat ${isHistoryView ? (resolvedHighSeverityIssues.length ? 'warning' : 'ok') : (lowStockAlerts.length ? 'warning' : 'ok')}`}>{isHistoryView ? `เคสหนักย้อนหลัง ${resolvedHighSeverityIssues.length}` : `สต็อกต่ำ ${lowStockAlerts.length}`}</span>
-          <span className={`compact-page-stat ${isHistoryView ? (issueReports.length ? 'ok' : 'warning') : (highSeverityIssues.length ? 'danger' : 'ok')}`}>{isHistoryView ? `แจ้งเตือนรวม ${issueReports.length}` : `รุนแรงสูง ${highSeverityIssues.length}`}</span>
+          <span className={`compact-page-stat ${isHistoryFilter ? (resolvedIssues.length ? 'ok' : 'warning') : (openIssues.length ? 'danger' : 'ok')}`}>{isHistoryFilter ? `ปิดงานแล้ว ${resolvedIssues.length}` : `ปัญหาค้าง ${openIssues.length}`}</span>
+          <span className={`compact-page-stat ${isHistoryFilter ? (resolvedHighSeverityIssues.length ? 'warning' : 'ok') : (lowStockAlerts.length ? 'warning' : 'ok')}`}>{isHistoryFilter ? `เคสหนักย้อนหลัง ${resolvedHighSeverityIssues.length}` : `สต็อกต่ำ ${lowStockAlerts.length}`}</span>
+          <span className={`compact-page-stat ${isHistoryFilter ? (issueReports.length ? 'ok' : 'warning') : (highSeverityIssues.length ? 'danger' : 'ok')}`}>{isHistoryFilter ? `แจ้งเตือนรวม ${issueReports.length}` : `รุนแรงสูง ${highSeverityIssues.length}`}</span>
         </div>
       </section>
 
@@ -1012,7 +1173,7 @@ export function ManagerNotificationsPage({ view = 'active' }) {
               <h3>{panelTitle}</h3>
               <p>{panelDescription}</p>
             </div>
-            <Bell size={18} className={`panel-accent ${isHistoryView ? 'warning' : 'danger'}`} />
+            <Bell size={18} className={`panel-accent ${isHistoryFilter ? 'warning' : 'danger'}`} />
           </div>
 
           <div className="notification-feed-shell">
@@ -1040,12 +1201,12 @@ export function ManagerNotificationsPage({ view = 'active' }) {
                   </div>
                   <div className="request-feed-side">
                     <span className={`status-chip ${alert.tone}`}>{alert.action}</span>
-                    {alert.kind === 'issue' && !isHistoryView ? (
+                    {alert.kind === 'issue' && !isHistoryFilter ? (
                       <div className="request-feed-actions">
                         <button type="button" className="ghost-button" onClick={() => handleIssueStatus(alert.issueId, 'กำลังตรวจสอบ')} disabled={alert.action === 'กำลังตรวจสอบ'}>รับทราบแล้ว</button>
                         <button type="button" className="primary-inline" onClick={() => handleIssueStatus(alert.issueId, 'ดำเนินการแล้ว')} disabled={alert.action === 'ดำเนินการแล้ว'}>ปิดงาน</button>
                       </div>
-                    ) : <span className="request-feed-helper">{isHistoryView ? 'ปิดงานแล้ว • ใช้รายการนี้สำหรับย้อนดูรายละเอียดเดิม' : 'ติดตามให้ทีมตรวจนับและวางแผนเติมสินค้า'}</span>}
+                    ) : <span className="request-feed-helper">{isHistoryFilter ? 'ปิดงานแล้ว • ใช้รายการนี้สำหรับย้อนดูรายละเอียดเดิม' : 'ติดตามให้ทีมตรวจนับและวางแผนเติมสินค้า'}</span>}
                   </div>
                 </div>
               );
@@ -1068,32 +1229,32 @@ export function ManagerNotificationsPage({ view = 'active' }) {
             <article className="notification-summary-card danger">
               <div className="notification-summary-card-head">
                 <span className="notification-summary-icon danger"><TriangleAlert size={16} /></span>
-                <span className="notification-summary-label">{isHistoryView ? 'ปิดงานแล้ว' : 'รอดำเนินการ'}</span>
+                <span className="notification-summary-label">{isHistoryFilter ? 'ปิดงานแล้ว' : 'รอดำเนินการ'}</span>
               </div>
-              <strong>{isHistoryView ? resolvedIssues.length : pendingIssues.length}</strong>
-              <small>{isHistoryView ? (resolvedIssues[0] ? resolvedIssues[0].title : 'ยังไม่มีประวัติที่ปิดงานแล้ว') : (pendingIssues[0] ? pendingIssues[0].title : 'ไม่มีรายการรอดำเนินการ')}</small>
+              <strong>{isHistoryFilter ? resolvedIssues.length : pendingIssues.length}</strong>
+              <small>{isHistoryFilter ? (resolvedIssues[0] ? resolvedIssues[0].title : 'ยังไม่มีประวัติที่ปิดงานแล้ว') : (pendingIssues[0] ? pendingIssues[0].title : 'ไม่มีรายการรอดำเนินการ')}</small>
             </article>
             <article className="notification-summary-card warning">
               <div className="notification-summary-card-head">
                 <span className="notification-summary-icon warning"><PackageSearch size={16} /></span>
-                <span className="notification-summary-label">{isHistoryView ? 'รุนแรงสูง' : 'สต็อกต่ำ'}</span>
+                <span className="notification-summary-label">{isHistoryFilter ? 'รุนแรงสูง' : 'สต็อกต่ำ'}</span>
               </div>
-              <strong>{isHistoryView ? resolvedHighSeverityIssues.length : lowStockAlerts.length}</strong>
-              <small>{isHistoryView ? (resolvedHighSeverityIssues[0] ? resolvedHighSeverityIssues[0].title : 'ยังไม่มีเคสหนักในประวัติ') : (lowStockAlerts[0] ? lowStockAlerts[0].title : 'ยังไม่มีสินค้าต่ำกว่าจุดเตือน')}</small>
+              <strong>{isHistoryFilter ? resolvedHighSeverityIssues.length : lowStockAlerts.length}</strong>
+              <small>{isHistoryFilter ? (resolvedHighSeverityIssues[0] ? resolvedHighSeverityIssues[0].title : 'ยังไม่มีเคสหนักในประวัติ') : (lowStockAlerts[0] ? lowStockAlerts[0].title : 'ยังไม่มีสินค้าต่ำกว่าจุดเตือน')}</small>
             </article>
             <article className="notification-summary-card warning">
               <div className="notification-summary-card-head">
                 <span className="notification-summary-icon warning"><Bell size={16} /></span>
-                <span className="notification-summary-label">{isHistoryView ? 'ย้อนหลังทั้งหมด' : 'กำลังตรวจสอบ'}</span>
+                <span className="notification-summary-label">{isHistoryFilter ? 'ย้อนหลังทั้งหมด' : 'กำลังตรวจสอบ'}</span>
               </div>
-              <strong>{isHistoryView ? allAlerts.length : reviewingIssues.length}</strong>
-              <small>{isHistoryView ? (allAlerts[0] ? allAlerts[0].title : 'ยังไม่มีรายการย้อนหลัง') : (reviewingIssues[0] ? reviewingIssues[0].title : 'ยังไม่มีงานที่รับทราบแล้ว')}</small>
+              <strong>{isHistoryFilter ? historyAlerts.length : reviewingIssues.length}</strong>
+              <small>{isHistoryFilter ? (historyAlerts[0] ? historyAlerts[0].title : 'ยังไม่มีรายการย้อนหลัง') : (reviewingIssues[0] ? reviewingIssues[0].title : 'ยังไม่มีงานที่รับทราบแล้ว')}</small>
             </article>
           </div>
 
           <div className="notification-mini-feed">
-            <strong className="notification-mini-feed-title">{isHistoryView ? 'ปิดงานล่าสุด' : 'รายการล่าสุด'}</strong>
-            {allAlerts.slice(0, 4).map((alert) => (
+            <strong className="notification-mini-feed-title">{isHistoryFilter ? 'ปิดงานล่าสุด' : 'รายการล่าสุด'}</strong>
+            {visibleAlerts.slice(0, 4).map((alert) => (
               <div key={`summary-${alert.id}`} className={`notification-mini-item kind-${alert.kind}`}>
                 <div className="notification-mini-item-head">
                   <div className="notification-mini-item-title">
@@ -1109,10 +1270,11 @@ export function ManagerNotificationsPage({ view = 'active' }) {
                 </div>
               </div>
             ))}
-            {!allAlerts.length ? <div className="empty-card compact">ตอนนี้ยังไม่มีรายการแจ้งเตือนของสาขา</div> : null}
+            {!visibleAlerts.length ? <div className="empty-card compact">{isHistoryFilter ? 'ยังไม่มีประวัติแจ้งเตือนของสาขา' : 'ตอนนี้ยังไม่มีรายการแจ้งเตือนของสาขา'}</div> : null}
           </div>
         </aside>
       </section>
+      </div>
     </DesktopWorkspace>
   );
 }
@@ -1531,7 +1693,7 @@ function InventoryCatalogPanel({ inventoryItems, className = '' }) {
 }
 
 export function ManagerNotificationHistoryPage() {
-  return <ManagerNotificationsPage view="history" />;
+  return <ManagerNotificationsPage initialFilter="history" />;
 }
 
 export function InventoryCatalogPage() {

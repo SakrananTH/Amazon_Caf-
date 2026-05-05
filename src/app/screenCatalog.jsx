@@ -2,7 +2,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import DesktopSchedule from '../features/manager/DesktopSchedule.jsx';
 import DesktopWorkspace from '../features/manager/DesktopWorkspace.jsx';
 import EmployeeHolidayPlanner from '../features/manager/EmployeeHolidayPlanner.jsx';
-import { EmployeesPage, HomePage, InventoryCatalogPage, ManagerLoginPage, ManagerNotificationHistoryPage, ManagerNotificationsPage, ReportsPage, SettingsPage } from '../features/manager/ManagementPages.jsx';
+import { EmployeesPage, HomePage, InventoryCatalogPage, ManagerLoginPage, ManagerNotificationsPage, ReportsPage, SettingsPage } from '../features/manager/ManagementPages.jsx';
 import { EmployeeMobileHomePage, EmployeeMobileInventoryPage, EmployeeMobileIssuePage, EmployeeMobileLoginPage, EmployeeMobileShiftPage } from '../features/employee/MobileEmployeePortal.jsx';
 import { AddEmployeeSheet, RemoveConfirm, RequestHelp, ScheduleBlockEditor } from '../features/manager/ModalScreens.jsx';
 import WeeklySchedulePage from '../features/manager/WeeklySchedulePage.jsx';
@@ -257,7 +257,7 @@ function RequestHistoryPage() {
   return (
     <ManagerDesktopGate>
 	  <div className="screen-stage desktop">
-        <ManagerNotificationHistoryPage />
+        <ManagerNotificationsPage initialFilter="history" />
       </div>
     </ManagerDesktopGate>
   );
