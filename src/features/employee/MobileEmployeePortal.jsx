@@ -150,6 +150,9 @@ function ThaiDateInput({ value = '', onChange, disabled = false, label = 'เล
       return undefined;
     }
 
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handlePointerDown = (event) => {
       if (!pickerRef.current?.contains(event.target)) {
         setIsOpen(false);
@@ -160,6 +163,7 @@ function ThaiDateInput({ value = '', onChange, disabled = false, label = 'เล
     document.addEventListener('touchstart', handlePointerDown);
 
     return () => {
+      document.body.style.overflow = previousOverflow;
       document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('touchstart', handlePointerDown);
     };
@@ -200,47 +204,50 @@ function ThaiDateInput({ value = '', onChange, disabled = false, label = 'เล
         <span>{formatThaiDateFieldValue(value)}</span>
         <CalendarDays size={16} />
       </button>
-      {isOpen ? <div className="employee-mobile-date-picker" role="dialog" aria-modal="false" aria-label={label}>
-        <div className="employee-mobile-date-picker-head">
-          <button type="button" className="ghost-button employee-mobile-date-nav" onClick={() => setViewMonth((currentMonth) => new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
-          <strong>{formatThaiCalendarMonth(viewMonth)}</strong>
-          <button type="button" className="ghost-button employee-mobile-date-nav" onClick={() => setViewMonth((currentMonth) => new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}><ChevronRight size={16} /></button>
-        </div>
-        <div className="employee-mobile-date-weekdays">
-          {thaiCalendarWeekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
-        </div>
-        <div className="employee-mobile-date-grid">
-          {monthGrid.map((day) => {
-            const isToday = day.value === todayValue;
-            const isSelected = day.value === selectedValue;
+      {isOpen ? <>
+        <button type="button" className="employee-mobile-date-picker-backdrop" aria-label={`ปิด${label}`} onClick={() => setIsOpen(false)} />
+        <div className="employee-mobile-date-picker" role="dialog" aria-modal="true" aria-label={label}>
+          <div className="employee-mobile-date-picker-head">
+            <button type="button" className="ghost-button employee-mobile-date-nav" onClick={() => setViewMonth((currentMonth) => new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
+            <strong>{formatThaiCalendarMonth(viewMonth)}</strong>
+            <button type="button" className="ghost-button employee-mobile-date-nav" onClick={() => setViewMonth((currentMonth) => new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}><ChevronRight size={16} /></button>
+          </div>
+          <div className="employee-mobile-date-weekdays">
+            {thaiCalendarWeekdays.map((weekday) => <span key={weekday}>{weekday}</span>)}
+          </div>
+          <div className="employee-mobile-date-grid">
+            {monthGrid.map((day) => {
+              const isToday = day.value === todayValue;
+              const isSelected = day.value === selectedValue;
 
-            return (
-              <button
-                key={day.value}
-                type="button"
-                className={`employee-mobile-date-cell ${day.isCurrentMonth ? '' : 'outside'} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`.trim()}
-                onClick={() => {
-                  onChange(day.value);
-                  setIsOpen(false);
-                }}
-              >
-                <span>{day.dayLabel}</span>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={day.value}
+                  type="button"
+                  className={`employee-mobile-date-cell ${day.isCurrentMonth ? '' : 'outside'} ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}`.trim()}
+                  onClick={() => {
+                    onChange(day.value);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span>{day.dayLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="employee-mobile-date-actions">
+            <button type="button" className="ghost-button" onClick={() => {
+              onChange('');
+              setIsOpen(false);
+            }}>ล้างวันที่</button>
+            <button type="button" className="ghost-button" onClick={() => {
+              onChange(todayValue);
+              setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+              setIsOpen(false);
+            }}>วันนี้</button>
+          </div>
         </div>
-        <div className="employee-mobile-date-actions">
-          <button type="button" className="ghost-button" onClick={() => {
-            onChange('');
-            setIsOpen(false);
-          }}>ล้างวันที่</button>
-          <button type="button" className="ghost-button" onClick={() => {
-            onChange(todayValue);
-            setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-            setIsOpen(false);
-          }}>วันนี้</button>
-        </div>
-      </div> : null}
+      </> : null}
     </div>
   );
 }
