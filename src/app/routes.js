@@ -17,6 +17,7 @@ export const routePaths = {
   removeEmployee: '/employees/remove',
   requestHelp: '/support',
   myRequests: '/requests',
+  requestHistory: '/requests/history',
   reports: '/reports',
   inventoryCatalog: '/reports/inventory',
   settings: '/settings',

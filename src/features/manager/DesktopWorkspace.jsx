@@ -9,6 +9,7 @@ export const managerNavItems = [
   { label: 'ตารางงาน', icon: CalendarDays, to: routePaths.desktopSchedule },
   { label: 'พนักงาน', icon: Users, to: routePaths.employees },
   { label: 'แจ้งเตือน', icon: Bell, to: routePaths.myRequests },
+  { label: 'ประวัติแจ้งเตือน', icon: CheckCircle2, to: routePaths.requestHistory },
   { label: 'รายงาน', icon: BarChart3, to: routePaths.reports },
   { label: 'ตั้งค่า', icon: Settings, to: routePaths.settings },
 ];

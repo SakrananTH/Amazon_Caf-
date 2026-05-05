@@ -2,7 +2,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import DesktopSchedule from '../features/manager/DesktopSchedule.jsx';
 import DesktopWorkspace from '../features/manager/DesktopWorkspace.jsx';
 import EmployeeHolidayPlanner from '../features/manager/EmployeeHolidayPlanner.jsx';
-import { EmployeesPage, HomePage, InventoryCatalogPage, ManagerLoginPage, ManagerNotificationsPage, ReportsPage, SettingsPage } from '../features/manager/ManagementPages.jsx';
+import { EmployeesPage, HomePage, InventoryCatalogPage, ManagerLoginPage, ManagerNotificationHistoryPage, ManagerNotificationsPage, ReportsPage, SettingsPage } from '../features/manager/ManagementPages.jsx';
 import { EmployeeMobileHomePage, EmployeeMobileInventoryPage, EmployeeMobileIssuePage, EmployeeMobileLoginPage, EmployeeMobileShiftPage } from '../features/employee/MobileEmployeePortal.jsx';
 import { AddEmployeeSheet, RemoveConfirm, RequestHelp, ScheduleBlockEditor } from '../features/manager/ModalScreens.jsx';
 import WeeklySchedulePage from '../features/manager/WeeklySchedulePage.jsx';
@@ -253,6 +253,16 @@ function MyRequestsPage() {
   );
 }
 
+function RequestHistoryPage() {
+  return (
+    <ManagerDesktopGate>
+	  <div className="screen-stage desktop">
+        <ManagerNotificationHistoryPage />
+      </div>
+    </ManagerDesktopGate>
+  );
+}
+
 function EmployeeRequestsPage() {
   return (
     <div className="screen-stage employee-mobile">
@@ -410,6 +420,13 @@ export const screenCatalog = [
     title: 'คำขอของฉัน',
     description: 'สรุปรายการคำขอทั้งหมดพร้อมสถานะการดำเนินการ',
     component: MyRequestsPage,
+  },
+  {
+    id: 'request-history',
+    path: routePaths.requestHistory,
+    title: 'ประวัติแจ้งเตือน',
+    description: 'ดูรายการแจ้งเตือนที่ปิดงานแล้วและตรวจย้อนหลังได้จากหน้าเดียว',
+    component: RequestHistoryPage,
   },
   {
     id: 'employee-requests',
