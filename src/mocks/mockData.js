@@ -49,8 +49,11 @@ export const calendarDaySettings = {
 };
 
 export const timeBlocks = [
-  { id: 1, time: '06:30 - 16:30', title: 'หน้าที่ในกะเช้า', required: 2, status: 'ok', tasks: ['เปิดร้าน', 'เตรียมวัตถุดิบ', 'ดูแลหน้าร้าน'], employeeIds: [1, 5] },
-  { id: 2, time: '07:30 - 17:30', title: 'หน้าที่ในกะสาย', required: 2, status: 'ok', tasks: ['ดูแลหน้าร้าน', 'เช็กสต็อก', 'ปิดร้าน'], employeeIds: [2, 3] }
+  { id: 1, roundPresetKey: 'morning', roundLabel: 'กะเช้า', time: '06:30 - 09:30', title: 'เปิดร้าน', required: 2, status: 'ok', tasks: ['เปิดร้าน', 'เปิดเครื่องกาแฟ', 'เตรียมวัตถุดิบ'], employeeIds: [1, 5] },
+  { id: 2, roundPresetKey: 'morning', roundLabel: 'กะเช้า', time: '09:30 - 12:30', title: 'หน้าบาร์เช้า', required: 1, status: 'ok', tasks: ['รับออเดอร์', 'ชงเครื่องดื่ม', 'เติมวัตถุดิบ'], employeeIds: [1] },
+  { id: 3, roundPresetKey: 'morning', roundLabel: 'กะเช้า', time: '12:30 - 14:30', title: 'เติมของช่วงเที่ยง', required: 1, status: 'ok', tasks: ['เติมน้ำแข็ง', 'เช็ดโต๊ะ', 'ดูร้าน'], employeeIds: [5] },
+  { id: 4, roundPresetKey: 'morning', roundLabel: 'กะเช้า', time: '14:30 - 16:30', title: 'เตรียมส่งกะ', required: 2, status: 'ok', tasks: ['เติมนม', 'สรุปสต็อกระหว่างวัน', 'ส่งงานมาตรฐาน'], employeeIds: [1, 5] },
+  { id: 5, roundPresetKey: 'late', roundLabel: 'กะสาย', time: '16:30 - 17:30', title: 'ปิดร้าน', required: 2, status: 'ok', tasks: ['ทำความสะอาดเครื่อง', 'เช็กสต็อก', 'เช็กปิดร้าน'], employeeIds: [2, 3] }
 ];
 
 export const requests = [

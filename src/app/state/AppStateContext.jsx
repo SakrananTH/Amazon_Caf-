@@ -4,7 +4,7 @@ import { isSupabaseConfigured, loadAppStateFromSupabase, loginEmployeePortal, lo
 
 const AppStateContext = createContext(null);
 const STORAGE_KEY = 'amazon-schedule-ui/state';
-const STATE_VERSION = 7;
+const STATE_VERSION = 8;
 export const MAX_EMPLOYEES = 5;
 const SCHEDULE_LOOKAHEAD_DAYS = 28;
 const MAX_INVENTORY_HISTORY_ITEMS = 80;
@@ -419,38 +419,225 @@ export const scheduleShiftPresets = [
   },
 ];
 
-const lateShiftTaskKeywords = ['ปิด', 'สต็อก', 'เช็คสต็อก', 'เช็กสต็อก', 'เช็คปิดร้าน', 'เช็กปิดร้าน'];
-
 function getScheduleShiftPreset(presetKey = 'morning') {
   return scheduleShiftPresets.find((preset) => preset.key === presetKey) ?? scheduleShiftPresets[0];
 }
 
-function getScheduleShiftPresetKey(startTime = '', hintText = '') {
-  const normalizedStartTime = normalizeClockValue(startTime);
-  const normalizedHint = normalizeSearchValue(hintText);
-
-  if (lateShiftTaskKeywords.some((keyword) => normalizedHint.includes(normalizeSearchValue(keyword)))) {
+function getScheduleShiftPresetKey(startTime = '', roundLabel = '') {
+  const normalizedRoundLabel = normalizeSearchValue(roundLabel);
+  if (normalizedRoundLabel.includes('กะเช้า') || normalizedRoundLabel.includes('รอบเช้า')) {
+    return 'morning';
+  }
+  if (normalizedRoundLabel.includes('กะสาย') || normalizedRoundLabel.includes('รอบสาย') || normalizedRoundLabel.includes('กะเย็น') || normalizedRoundLabel.includes('รอบเย็น')) {
     return 'late';
   }
 
-  if (normalizedStartTime) {
-    const [hoursText = '0', minutesText = '0'] = normalizedStartTime.split(':');
-    const totalMinutes = (Number(hoursText) * 60) + Number(minutesText);
-    if (totalMinutes >= 450) {
-      return 'late';
-    }
+  const normalizedStartTime = normalizeClockValue(startTime);
+  if (!normalizedStartTime) {
+    return 'custom';
   }
 
-  return 'morning';
+  const [hoursText = '0', minutesText = '0'] = normalizedStartTime.split(':');
+  const totalMinutes = (Number(hoursText) * 60) + Number(minutesText);
+  if (totalMinutes <= 390) {
+    return 'morning';
+  }
+  if (totalMinutes >= 990) {
+    return 'late';
+  }
+
+  return 'custom';
 }
 
-function dedupeTasksWithDefaults(tasks = [], presetKey = 'morning') {
-  const preset = getScheduleShiftPreset(presetKey);
-  return [...new Set([...preset.defaultTasks, ...tasks.map((task) => String(task).trim()).filter(Boolean)])];
+function getAttendanceWindowKey(window = {}) {
+  const presetKey = String(window?.roundPresetKey ?? '').trim();
+  if (presetKey && presetKey !== 'custom') {
+    return presetKey;
+  }
+
+  const derivedPresetKey = getScheduleShiftPresetKey(getBlockStartLabel(window), window?.roundLabel ?? window?.title ?? '');
+  if (derivedPresetKey === 'morning' || derivedPresetKey === 'late') {
+    return derivedPresetKey;
+  }
+
+  return buildBlockTimeLabel(getBlockStartLabel(window), getBlockEndLabel(window)) || String(window?.key ?? '').trim() || 'custom';
 }
 
-function ensureSingleShiftPerDay(blocks = []) {
+function buildAttendanceWindowEntry(window = {}, fallbackKey = '') {
+  const normalizedKey = String(window?.key ?? fallbackKey ?? getAttendanceWindowKey(window)).trim() || getAttendanceWindowKey(window);
+  const preset = scheduleShiftPresets.find((entry) => entry.key === normalizedKey) ?? null;
+  const startTime = preset?.startTime ?? getBlockStartLabel(window);
+  const endTime = preset?.endTime ?? getBlockEndLabel(window);
+  return {
+    key: normalizedKey,
+    startTime,
+    endTime,
+    time: buildBlockTimeLabel(startTime, endTime),
+    employeeIds: [...new Set((window?.employeeIds ?? []).filter((employeeId) => Number.isFinite(Number(employeeId))).map(Number))],
+  };
+}
+
+function buildAttendanceWindowsFromBlocks(blocks = [], allowedEmployeeIds = null) {
+  return blocks.reduce((attendanceWindows, block) => {
+    const dateKey = String(block?.dateKey ?? formatDateKey());
+    const windowKey = getAttendanceWindowKey(block);
+    const currentDateWindows = attendanceWindows[dateKey] ?? {};
+    const existingWindow = currentDateWindows[windowKey] ?? buildAttendanceWindowEntry(block, windowKey);
+    const nextEmployeeIds = [...new Set([
+      ...existingWindow.employeeIds,
+      ...((block?.employeeIds ?? []).filter((employeeId) => !allowedEmployeeIds || allowedEmployeeIds.has(employeeId)).map(Number)),
+    ])];
+    const startTimeCandidates = [existingWindow.startTime, getBlockStartLabel(block)].filter(Boolean).sort();
+    const endTimeCandidates = [existingWindow.endTime, getBlockEndLabel(block)].filter(Boolean).sort();
+
+    attendanceWindows[dateKey] = {
+      ...currentDateWindows,
+      [windowKey]: {
+        ...existingWindow,
+        startTime: startTimeCandidates[0] ?? existingWindow.startTime,
+        endTime: endTimeCandidates.at(-1) ?? existingWindow.endTime,
+        time: buildBlockTimeLabel(startTimeCandidates[0] ?? existingWindow.startTime, endTimeCandidates.at(-1) ?? existingWindow.endTime),
+        employeeIds: nextEmployeeIds,
+      },
+    };
+
+    return attendanceWindows;
+  }, {});
+}
+
+function normalizeEmployeeAttendanceWindows(attendanceWindows, allowedEmployeeIds = null, employeesById = new Map(), availabilityCalendar = null) {
+  const sourceWindows = attendanceWindows && typeof attendanceWindows === 'object' ? attendanceWindows : {};
+
+  return Object.entries(sourceWindows).reduce((normalizedWindows, [dateKey, dateWindows]) => {
+    const normalizedDateWindows = Object.entries(dateWindows ?? {}).reduce((windowAccumulator, [windowKey, windowValue]) => {
+      const normalizedWindow = buildAttendanceWindowEntry(windowValue, windowKey);
+      const safeEmployeeIds = normalizedWindow.employeeIds.filter((employeeId) => {
+        if (allowedEmployeeIds && !allowedEmployeeIds.has(employeeId)) {
+          return false;
+        }
+
+        const employee = employeesById.get(employeeId);
+        return isEmployeeScheduleEligible(employee, dateKey, availabilityCalendar);
+      });
+
+      if (!safeEmployeeIds.length) {
+        return windowAccumulator;
+      }
+
+      windowAccumulator[normalizedWindow.key] = {
+        ...normalizedWindow,
+        employeeIds: safeEmployeeIds,
+      };
+      return windowAccumulator;
+    }, {});
+
+    if (Object.keys(normalizedDateWindows).length) {
+      normalizedWindows[dateKey] = normalizedDateWindows;
+    }
+
+    return normalizedWindows;
+  }, {});
+}
+
+function getEmployeeAttendanceWindow(employeeId, dateKey, attendanceWindows = {}) {
+  const normalizedEmployeeId = Number(employeeId);
+  return Object.values(attendanceWindows?.[dateKey] ?? {}).find((window) => window.employeeIds.includes(normalizedEmployeeId)) ?? null;
+}
+
+export function isEmployeeEligibleForAttendanceWindow(employee, targetWindow, attendanceWindows = {}, availabilityCalendar = null) {
+  if (!employee || !targetWindow) {
+    return false;
+  }
+
+  if (!isEmployeeScheduleEligible(employee, targetWindow.dateKey, availabilityCalendar)) {
+    return false;
+  }
+
+  const currentWindow = getEmployeeAttendanceWindow(employee.id, targetWindow.dateKey, attendanceWindows);
+  return !currentWindow;
+}
+
+export function isEmployeeEligibleForScheduleBlock(employee, targetBlock, attendanceWindows = {}, availabilityCalendar = null) {
+  if (!employee || !targetBlock) {
+    return false;
+  }
+
+  if (!isEmployeeScheduleEligible(employee, targetBlock.dateKey, availabilityCalendar)) {
+    return false;
+  }
+
+  const attendanceWindow = getEmployeeAttendanceWindow(employee.id, targetBlock.dateKey, attendanceWindows);
+  if (!attendanceWindow) {
+    return false;
+  }
+
+  const attendanceEndTime = normalizeClockValue(attendanceWindow.endTime);
+  const blockEndTime = getBlockEndLabel(targetBlock);
+  if (attendanceEndTime && blockEndTime && attendanceEndTime < blockEndTime) {
+    return false;
+  }
+
+  return true;
+}
+
+function getBlockAssignmentGroupKey(block = {}) {
+  const presetKey = String(block?.roundPresetKey ?? '').trim();
+  if (presetKey && presetKey !== 'custom') {
+    return presetKey;
+  }
+
+  const derivedPresetKey = getScheduleShiftPresetKey(getBlockStartLabel(block), block?.roundLabel ?? block?.title ?? '');
+  if (derivedPresetKey === 'morning' || derivedPresetKey === 'late') {
+    return derivedPresetKey;
+  }
+
+  const explicitRoundLabel = String(block?.roundLabel ?? '').trim();
+  if (explicitRoundLabel) {
+    return normalizeSearchValue(explicitRoundLabel);
+  }
+
+  return normalizeSearchValue(getBlockRoundLabel(block));
+}
+
+function isEmployeeCompatibleWithBlock(employeeId, targetBlock, blocks = []) {
+  if (!targetBlock) {
+    return false;
+  }
+
+  const targetGroupKey = getBlockAssignmentGroupKey(targetBlock);
+  return blocks
+    .filter((block) => block.dateKey === targetBlock.dateKey && block.id !== targetBlock.id && block.employeeIds.includes(employeeId))
+    .every((block) => getBlockAssignmentGroupKey(block) === targetGroupKey);
+}
+
+export function isEmployeeEligibleForBlockAssignment(employee, targetBlock, blocks = [], availabilityCalendar = null) {
+  if (!employee || !targetBlock) {
+    return false;
+  }
+
+  if (!isEmployeeScheduleEligible(employee, targetBlock.dateKey, availabilityCalendar)) {
+    return false;
+  }
+
+  return isEmployeeCompatibleWithBlock(employee.id, targetBlock, blocks);
+}
+
+function isCollapsedPrimaryShiftBlock(block = {}) {
+  const normalizedTitle = normalizeSearchValue(block.title);
+  const normalizedRoundLabel = normalizeSearchValue(block.roundLabel);
+  const tasksCount = Array.isArray(block.tasks) ? block.tasks.length : 0;
+  return normalizedTitle.includes('หน้าที่ในกะเช้า')
+    || normalizedTitle.includes('หน้าที่ในกะสาย')
+    || normalizedRoundLabel.includes('กะเช้า')
+    || normalizedRoundLabel.includes('กะสาย')
+    || normalizedRoundLabel.includes('รอบเช้า')
+    || normalizedRoundLabel.includes('รอบสาย')
+    || ((block.roundPresetKey === 'morning' || block.roundPresetKey === 'late' || block.roundPresetKey === 'custom') && tasksCount >= 6);
+}
+
+function expandCollapsedShiftBlocks(blocks = [], employeesById = new Map()) {
   const blocksByDate = new Map();
+
   blocks.forEach((block) => {
     const dateKey = String(block.dateKey ?? formatDateKey());
     if (!blocksByDate.has(dateKey)) {
@@ -459,77 +646,25 @@ function ensureSingleShiftPerDay(blocks = []) {
     blocksByDate.get(dateKey).push(block);
   });
 
-  return [...blocksByDate.values()].flatMap((dateBlocks) => {
-    const orderedBlocks = [...dateBlocks].sort((leftBlock, rightBlock) => {
-      const leftPreset = getScheduleShiftPreset(leftBlock.roundPresetKey);
-      const rightPreset = getScheduleShiftPreset(rightBlock.roundPresetKey);
-      return (rightPreset.key === 'late') - (leftPreset.key === 'late');
-    });
-    const assignedEmployeeIds = new Set();
-
-    return orderedBlocks.map((block) => {
-      const nextEmployeeIds = block.employeeIds.filter((employeeId) => {
-        if (assignedEmployeeIds.has(employeeId)) {
-          return false;
-        }
-        assignedEmployeeIds.add(employeeId);
-        return true;
-      });
-
-      return {
-        ...block,
-        employeeIds: nextEmployeeIds,
-      };
-    });
-  });
-}
-
-function collapseBlocksIntoPrimaryShifts(blocks = [], employeesById = new Map(), fallbackDateKey = formatDateKey()) {
-  const groupedBlocks = new Map();
-
-  blocks.forEach((block, index) => {
-    const parsedTimeRange = parseBlockTimeRange(block.time ?? '');
-    const startTime = normalizeClockValue(block.startTime ?? parsedTimeRange.startTime);
-    const presetKey = getScheduleShiftPresetKey(startTime, `${block.title ?? ''} ${(block.tasks ?? []).join(' ')}`);
-    const dateKey = String(block.dateKey ?? fallbackDateKey);
-    const groupKey = `${dateKey}:${presetKey}`;
-    const preset = getScheduleShiftPreset(presetKey);
-
-    if (!groupedBlocks.has(groupKey)) {
-      groupedBlocks.set(groupKey, {
-        id: block.id ?? createDateScopedBlockId(dateKey, `${presetKey}-${index}`, index),
-        templateId: block.templateId ?? block.id ?? `${presetKey}-${index}`,
-        dateKey,
-        roundPresetKey: preset.key,
-        roundLabel: preset.label,
-        startTime: preset.startTime,
-        endTime: preset.endTime,
-        time: buildBlockTimeLabel(preset.startTime, preset.endTime),
-        title: preset.defaultTitle,
-        required: 0,
-        tasks: [],
-        employeeIds: [],
-      });
+  return [...blocksByDate.entries()].flatMap(([dateKey, dateBlocks]) => {
+    const shouldExpand = dateBlocks.length <= 2 && dateBlocks.every(isCollapsedPrimaryShiftBlock);
+    if (!shouldExpand) {
+      return dateBlocks;
     }
 
-    const groupedBlock = groupedBlocks.get(groupKey);
-    groupedBlock.required = Math.max(groupedBlock.required, Number(block.required) || 0);
-    groupedBlock.tasks = dedupeTasksWithDefaults([...groupedBlock.tasks, ...(block.tasks ?? []), block.title ?? ''], preset.key);
-    groupedBlock.employeeIds = [...groupedBlock.employeeIds, ...(block.employeeIds ?? [])];
-  });
+    const collapsedBlocksByGroup = new Map(dateBlocks.map((block) => [getBlockAssignmentGroupKey(block), block]));
 
-  const collapsedBlocks = [...groupedBlocks.values()].map((block) => {
-    const preset = getScheduleShiftPreset(block.roundPresetKey);
-    return normalizeBlock({
-      ...block,
-      title: preset.defaultTitle,
-      required: Math.max(block.required, block.employeeIds.length, 1),
-      tasks: dedupeTasksWithDefaults(block.tasks, block.roundPresetKey),
-      employeeIds: [...new Set(block.employeeIds)],
-    }, employeesById, block.dateKey);
+    return seedTimeBlocks.map((templateBlock, index) => {
+      const assignmentSource = collapsedBlocksByGroup.get(getBlockAssignmentGroupKey(templateBlock));
+      return normalizeBlock({
+        ...templateBlock,
+        id: createDateScopedBlockId(dateKey, templateBlock.templateId ?? templateBlock.id, index),
+        templateId: templateBlock.templateId ?? templateBlock.id,
+        dateKey,
+        employeeIds: assignmentSource?.employeeIds ?? [],
+      }, employeesById, dateKey);
+    });
   });
-
-  return ensureSingleShiftPerDay(collapsedBlocks).map((block) => normalizeBlock(block, employeesById, block.dateKey));
 }
 
 export function normalizeClockValue(value = '') {
@@ -568,7 +703,25 @@ export function buildBlockTimeLabel(startTime = '', endTime = '') {
 }
 
 function inferRoundLabelFromStartTime(startTime = '') {
-  return getScheduleShiftPreset(getScheduleShiftPresetKey(startTime)).label;
+  const presetKey = getScheduleShiftPresetKey(startTime);
+  if (presetKey === 'morning' || presetKey === 'late') {
+    return getScheduleShiftPreset(presetKey).label;
+  }
+
+  const normalizedStartTime = normalizeClockValue(startTime);
+  if (!normalizedStartTime) {
+    return 'รอบงาน';
+  }
+
+  const [hoursText = '0', minutesText = '0'] = normalizedStartTime.split(':');
+  const totalMinutes = (Number(hoursText) * 60) + Number(minutesText);
+  if (totalMinutes < 720) {
+    return 'รอบเช้า';
+  }
+  if (totalMinutes < 960) {
+    return 'รอบบ่าย';
+  }
+  return 'รอบเย็น';
 }
 
 export function getBlockRoundLabel(block = {}) {
@@ -593,12 +746,10 @@ export function getBlockStartLabel(block = {}) {
 
 function normalizeBlock(block, employeesById = new Map(), fallbackDateKey = formatDateKey()) {
   const parsedTimeRange = parseBlockTimeRange(block.time ?? '');
-  const requestedStartTime = normalizeClockValue(block.startTime ?? parsedTimeRange.startTime);
-  const presetKey = String(block.roundPresetKey ?? getScheduleShiftPresetKey(requestedStartTime, `${block.title ?? ''} ${(block.tasks ?? []).join(' ')}`));
-  const preset = getScheduleShiftPreset(presetKey);
-  const startTime = preset.startTime;
-  const endTime = preset.endTime;
-  const timeLabel = buildBlockTimeLabel(startTime, endTime);
+  const startTime = normalizeClockValue(block.startTime ?? parsedTimeRange.startTime);
+  const endTime = normalizeClockValue(block.endTime ?? parsedTimeRange.endTime);
+  const timeLabel = buildBlockTimeLabel(startTime, endTime) || String(block.time ?? '').trim();
+  const derivedPresetKey = getScheduleShiftPresetKey(startTime, block.roundLabel);
 
   return {
     ...block,
@@ -607,10 +758,10 @@ function normalizeBlock(block, employeesById = new Map(), fallbackDateKey = form
     time: timeLabel,
     startTime,
     endTime,
-    roundPresetKey: preset.key,
-    roundLabel: preset.label,
-    title: String(block.title ?? '').trim() || preset.defaultTitle,
-    tasks: dedupeTasksWithDefaults(block.tasks ?? [], preset.key),
+    roundPresetKey: String(block.roundPresetKey ?? derivedPresetKey),
+    roundLabel: String(block.roundLabel ?? '').trim() || getBlockRoundLabel({ ...block, startTime, time: timeLabel }),
+    title: String(block.title ?? '').trim(),
+    tasks: [...(block.tasks ?? [])],
     employeeIds: [...new Set(block.employeeIds)],
     status: computeBlockStatus(block.required, countAssignableEmployees(block.employeeIds, employeesById)),
   };
@@ -630,11 +781,10 @@ function buildSeedScheduleBlocks(baseBlocks = [], employeesById = new Map(), sta
   const rosterIds = Array.from(employeesById.values()).filter((employee) => !isManagerRole(employee.role)).map((employee) => employee.id);
   const firstDate = new Date(startDate);
   firstDate.setHours(0, 0, 0, 0);
-  const normalizedBaseBlocks = collapseBlocksIntoPrimaryShifts(baseBlocks, employeesById, formatDateKey(firstDate));
 
   return Array.from({ length: totalDays }, (_, dayOffset) => {
     const dateKey = formatDateKey(addDays(firstDate, dayOffset));
-    return normalizedBaseBlocks.map((block, blockIndex) => normalizeBlock({
+    return baseBlocks.map((block, blockIndex) => normalizeBlock({
       ...block,
       id: createDateScopedBlockId(dateKey, block.templateId ?? block.id, blockIndex),
       templateId: block.templateId ?? block.id,
@@ -650,13 +800,13 @@ function sanitizeTimeBlocks(blocks, allowedEmployeeIds, employeesById = new Map(
     ...block,
     employeeIds: block.employeeIds.filter((employeeId) => allowedEmployeeIds.has(employeeId) && isEmployeeScheduleEligible(employeesById.get(employeeId))),
   }, employeesById, block.dateKey ?? formatDateKey()));
-  const collapsedBlocks = collapseBlocksIntoPrimaryShifts(sanitizedBlocks, employeesById, formatDateKey());
+  const migratedBlocks = hasDateScopedBlocks ? expandCollapsedShiftBlocks(sanitizedBlocks, employeesById) : sanitizedBlocks;
 
   if (hasDateScopedBlocks) {
-    return collapsedBlocks;
+    return migratedBlocks;
   }
 
-  return buildSeedScheduleBlocks(collapsedBlocks, employeesById);
+  return buildSeedScheduleBlocks(migratedBlocks, employeesById);
 }
 
 function cloneRequests() {
@@ -849,14 +999,17 @@ function buildDefaultState() {
   const normalizedEmployees = normalizeEmployees(seedEmployees);
   const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
   const employeesById = buildEmployeesById(normalizedEmployees);
+  const employeeAvailabilityCalendar = normalizeAvailabilityCalendar(seedEmployeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
+  const timeBlocks = sanitizeTimeBlocks(seedTimeBlocks, allowedEmployeeIds, employeesById);
   return {
     version: STATE_VERSION,
     employees: normalizedEmployees,
     managerSessionActive: false,
     employeePortalSessionId: null,
     calendarDaySettings: normalizeCalendarDaySettings(seedCalendarDaySettings),
-    employeeAvailabilityCalendar: normalizeAvailabilityCalendar(seedEmployeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees),
-    timeBlocks: sanitizeTimeBlocks(seedTimeBlocks, allowedEmployeeIds, employeesById),
+    employeeAvailabilityCalendar,
+    employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(buildAttendanceWindowsFromBlocks(timeBlocks, allowedEmployeeIds), allowedEmployeeIds, employeesById, employeeAvailabilityCalendar),
+    timeBlocks,
     requests: cloneRequests(),
 	inventoryItems: cloneInventoryItems(),
   inventoryHistory: [],
@@ -890,7 +1043,17 @@ function readInitialState() {
         managerSessionActive: Boolean(parsedValue.managerSessionActive),
         employeePortalSessionId: Number.isFinite(parsedValue.employeePortalSessionId) ? parsedValue.employeePortalSessionId : null,
         calendarDaySettings: normalizeCalendarDaySettings(parsedValue.calendarDaySettings ?? fallbackState.calendarDaySettings),
-        employeeAvailabilityCalendar: normalizeAvailabilityCalendar(parsedValue.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees),
+        employeeAvailabilityCalendar: (() => {
+          const normalizedCalendar = normalizeAvailabilityCalendar(parsedValue.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
+          return normalizedCalendar;
+        })(),
+        employeeAttendanceWindows: (() => {
+          const normalizedCalendar = normalizeAvailabilityCalendar(parsedValue.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
+          const nextTimeBlocks = Array.isArray(parsedValue.timeBlocks)
+            ? sanitizeTimeBlocks(parsedValue.timeBlocks, allowedEmployeeIds, employeesById)
+            : fallbackState.timeBlocks;
+          return normalizeEmployeeAttendanceWindows(buildAttendanceWindowsFromBlocks(nextTimeBlocks, allowedEmployeeIds), allowedEmployeeIds, employeesById, normalizedCalendar);
+        })(),
         timeBlocks: Array.isArray(parsedValue.timeBlocks)
           ? sanitizeTimeBlocks(parsedValue.timeBlocks, allowedEmployeeIds, employeesById)
           : fallbackState.timeBlocks,
@@ -906,18 +1069,21 @@ function readInitialState() {
     const normalizedEmployees = Array.isArray(parsedValue.employees) ? normalizeEmployees(parsedValue.employees) : fallbackState.employees;
     const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
     const employeesById = buildEmployeesById(normalizedEmployees);
+    const normalizedCalendar = normalizeAvailabilityCalendar(parsedValue.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
+    const nextTimeBlocks = needsThreeEmployeeMigration
+      ? sanitizeTimeBlocks(seedTimeBlocks, allowedEmployeeIds, employeesById)
+      : Array.isArray(parsedValue.timeBlocks)
+        ? sanitizeTimeBlocks(parsedValue.timeBlocks, allowedEmployeeIds, employeesById)
+        : fallbackState.timeBlocks;
     return {
       version: STATE_VERSION,
       employees: normalizedEmployees,
       managerSessionActive: Boolean(parsedValue.managerSessionActive),
       employeePortalSessionId: Number.isFinite(parsedValue.employeePortalSessionId) ? parsedValue.employeePortalSessionId : null,
       calendarDaySettings: normalizeCalendarDaySettings(parsedValue.calendarDaySettings ?? fallbackState.calendarDaySettings),
-      employeeAvailabilityCalendar: normalizeAvailabilityCalendar(parsedValue.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees),
-      timeBlocks: needsThreeEmployeeMigration
-        ? sanitizeTimeBlocks(seedTimeBlocks, allowedEmployeeIds, employeesById)
-        : Array.isArray(parsedValue.timeBlocks)
-          ? sanitizeTimeBlocks(parsedValue.timeBlocks, allowedEmployeeIds, employeesById)
-          : fallbackState.timeBlocks,
+      employeeAvailabilityCalendar: normalizedCalendar,
+      employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(parsedValue.employeeAttendanceWindows ?? buildAttendanceWindowsFromBlocks(nextTimeBlocks, allowedEmployeeIds), allowedEmployeeIds, employeesById, normalizedCalendar),
+      timeBlocks: nextTimeBlocks,
       requests: Array.isArray(parsedValue.requests) ? parsedValue.requests.map((request) => ({ ...request })) : fallbackState.requests,
     inventoryItems: Array.isArray(parsedValue.inventoryItems) ? parsedValue.inventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
 		inventoryHistory: Array.isArray(parsedValue.inventoryHistory) ? parsedValue.inventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
@@ -934,6 +1100,14 @@ function hydrateSupabaseState(remoteState, previousState) {
   const normalizedEmployees = normalizeEmployees(remoteState?.employees ?? fallbackState.employees);
   const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
   const employeesById = buildEmployeesById(normalizedEmployees);
+  const normalizedCalendar = normalizeAvailabilityCalendar(remoteState?.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
+  const nextTimeBlocks = Array.isArray(remoteState?.timeBlocks)
+    ? sanitizeTimeBlocks(remoteState.timeBlocks, allowedEmployeeIds, employeesById)
+    : fallbackState.timeBlocks;
+  const hasRemoteAttendanceWindows = Boolean(remoteState) && Object.prototype.hasOwnProperty.call(remoteState, 'employeeAttendanceWindows');
+  const baseAttendanceWindows = hasRemoteAttendanceWindows
+    ? remoteState?.employeeAttendanceWindows
+    : previousState?.employeeAttendanceWindows;
   const persistedSessionId = Number.isFinite(previousState?.employeePortalSessionId) && allowedEmployeeIds.has(previousState.employeePortalSessionId)
     ? previousState.employeePortalSessionId
     : null;
@@ -945,10 +1119,9 @@ function hydrateSupabaseState(remoteState, previousState) {
     managerSessionActive: Boolean(previousState?.managerSessionActive),
     employeePortalSessionId: persistedSessionId,
     calendarDaySettings: normalizeCalendarDaySettings(remoteState?.calendarDaySettings ?? fallbackState.calendarDaySettings),
-    employeeAvailabilityCalendar: normalizeAvailabilityCalendar(remoteState?.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees),
-    timeBlocks: Array.isArray(remoteState?.timeBlocks)
-      ? sanitizeTimeBlocks(remoteState.timeBlocks, allowedEmployeeIds, employeesById)
-      : fallbackState.timeBlocks,
+    employeeAvailabilityCalendar: normalizedCalendar,
+    employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(baseAttendanceWindows ?? buildAttendanceWindowsFromBlocks(nextTimeBlocks, allowedEmployeeIds), allowedEmployeeIds, employeesById, normalizedCalendar),
+    timeBlocks: nextTimeBlocks,
     requests: Array.isArray(remoteState?.requests) ? remoteState.requests.map((request) => ({ ...request })) : fallbackState.requests,
     inventoryItems: Array.isArray(remoteState?.inventoryItems) ? remoteState.inventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
     inventoryHistory: Array.isArray(remoteState?.inventoryHistory) ? remoteState.inventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
@@ -959,9 +1132,11 @@ function hydrateSupabaseState(remoteState, previousState) {
 
 function buildSupabasePersistedState(state) {
   return {
+    version: Number.isFinite(state?.version) ? state.version : STATE_VERSION,
     employees: state.employees,
     calendarDaySettings: state.calendarDaySettings,
     employeeAvailabilityCalendar: state.employeeAvailabilityCalendar,
+    employeeAttendanceWindows: state.employeeAttendanceWindows,
     timeBlocks: state.timeBlocks,
     requests: state.requests,
     inventoryItems: state.inventoryItems,
@@ -990,7 +1165,7 @@ export function AppStateProvider({ children }) {
   const [isSupabaseSyncReady, setIsSupabaseSyncReady] = useState(!useSupabaseBackend || !isSupabaseConfigured);
   const lastSyncedSignatureRef = useRef(null);
   const syncTimeoutRef = useRef(null);
-  const { calendarDaySettings, employeeAvailabilityCalendar, employeePortalSessionId, employees, inventoryHistory, inventoryItems, issueReports, managerSessionActive, requests, settings, timeBlocks } = state;
+  const { calendarDaySettings, employeeAvailabilityCalendar, employeeAttendanceWindows, employeePortalSessionId, employees, inventoryHistory, inventoryItems, issueReports, managerSessionActive, requests, settings, timeBlocks } = state;
 
   useEffect(() => {
     if (!useSupabaseBackend || !isSupabaseConfigured) {
@@ -1071,22 +1246,112 @@ export function AppStateProvider({ children }) {
     }
 
     const employeesById = buildEmployeesById(employees);
-    const safeSelectedIds = selectedIds.filter((employeeId) => isEmployeeScheduleEligible(employeesById.get(employeeId), block.dateKey, employeeAvailabilityCalendar));
+    const safeSelectedIds = selectedIds.filter((employeeId) => isEmployeeEligibleForScheduleBlock(employeesById.get(employeeId), block, employeeAttendanceWindows, employeeAvailabilityCalendar));
     const nextEmployeeIds = [...new Set([...block.employeeIds, ...safeSelectedIds])];
     const updatedBlock = normalizeBlock({ ...block, employeeIds: nextEmployeeIds }, employeesById, block.dateKey);
     setState((currentState) => ({
       ...currentState,
-      timeBlocks: currentState.timeBlocks.map((entry) => {
-        if (entry.dateKey === block.dateKey && entry.id !== blockId) {
-          return normalizeBlock({
-            ...entry,
-            employeeIds: entry.employeeIds.filter((employeeId) => !safeSelectedIds.includes(employeeId)),
-          }, employeesById, entry.dateKey);
-        }
-        return entry.id === blockId ? updatedBlock : entry;
-      }),
+      timeBlocks: currentState.timeBlocks.map((entry) => (entry.id === blockId ? updatedBlock : entry)),
     }));
     return updatedBlock;
+  };
+
+  const addEmployeesToWindow = (blockIds, selectedIds, summaryOverrides = {}) => {
+    const uniqueBlockIds = [...new Set(blockIds ?? [])];
+    const targetBlocks = timeBlocks.filter((entry) => uniqueBlockIds.includes(entry.id));
+    if (!targetBlocks.length) {
+      return null;
+    }
+
+    const employeesById = buildEmployeesById(employees);
+    const targetWindow = targetBlocks[0];
+    const windowKey = getAttendanceWindowKey(targetWindow);
+    const windowDateKey = String(targetWindow.dateKey ?? formatDateKey());
+    const startTime = targetBlocks.map((block) => getBlockStartLabel(block)).filter(Boolean).sort()[0] ?? '';
+    const endTime = targetBlocks.map((block) => getBlockEndLabel(block)).filter(Boolean).sort().at(-1) ?? '';
+    const safeSelectedIds = selectedIds.filter((employeeId) => isEmployeeEligibleForAttendanceWindow(employeesById.get(employeeId), targetWindow, employeeAttendanceWindows, employeeAvailabilityCalendar));
+    if (!safeSelectedIds.length) {
+      return null;
+    }
+
+    setState((currentState) => {
+      const nextDateWindows = Object.fromEntries(
+        Object.entries(currentState.employeeAttendanceWindows?.[windowDateKey] ?? {}).map(([entryKey, entryValue]) => {
+          const nextEmployeeIds = entryKey === windowKey
+            ? entryValue.employeeIds ?? []
+            : (entryValue.employeeIds ?? []).filter((employeeId) => !safeSelectedIds.includes(employeeId));
+          return [entryKey, { ...entryValue, employeeIds: nextEmployeeIds }];
+        }).filter(([, entryValue]) => entryValue.employeeIds.length),
+      );
+
+      nextDateWindows[windowKey] = {
+        ...buildAttendanceWindowEntry(currentState.employeeAttendanceWindows?.[windowDateKey]?.[windowKey] ?? targetWindow, windowKey),
+        startTime: startTime || nextDateWindows[windowKey]?.startTime || getBlockStartLabel(targetWindow),
+        endTime: endTime || nextDateWindows[windowKey]?.endTime || getBlockEndLabel(targetWindow),
+        time: buildBlockTimeLabel(
+          startTime || nextDateWindows[windowKey]?.startTime || getBlockStartLabel(targetWindow),
+          endTime || nextDateWindows[windowKey]?.endTime || getBlockEndLabel(targetWindow),
+        ),
+        employeeIds: [...new Set([...(nextDateWindows[windowKey]?.employeeIds ?? []), ...safeSelectedIds])],
+      };
+
+      return {
+        ...currentState,
+        employeeAttendanceWindows: {
+          ...(currentState.employeeAttendanceWindows ?? {}),
+          [windowDateKey]: nextDateWindows,
+        },
+      };
+    });
+
+    return {
+      ...targetBlocks[0],
+      roundLabel: String(summaryOverrides.roundLabel ?? getBlockRoundLabel(targetBlocks[0])).trim(),
+      time: String(summaryOverrides.time ?? buildBlockTimeLabel(startTime, endTime) ?? targetBlocks[0].time).trim(),
+      title: String(summaryOverrides.title ?? targetBlocks[0].title).trim(),
+    };
+  };
+
+  const removeEmployeeFromAttendanceWindow = (dateKey, windowKey, employeeId) => {
+    const normalizedDateKey = String(dateKey ?? formatDateKey()).trim();
+    const normalizedWindowKey = String(windowKey ?? '').trim();
+    const normalizedEmployeeId = Number(employeeId);
+    const targetWindow = employeeAttendanceWindows?.[normalizedDateKey]?.[normalizedWindowKey];
+    if (!targetWindow || !targetWindow.employeeIds.includes(normalizedEmployeeId)) {
+      return null;
+    }
+
+    setState((currentState) => {
+      const nextDateWindows = { ...(currentState.employeeAttendanceWindows?.[normalizedDateKey] ?? {}) };
+      const nextEmployeeIds = (nextDateWindows[normalizedWindowKey]?.employeeIds ?? []).filter((entry) => entry !== normalizedEmployeeId);
+
+      if (nextEmployeeIds.length) {
+        nextDateWindows[normalizedWindowKey] = {
+          ...nextDateWindows[normalizedWindowKey],
+          employeeIds: nextEmployeeIds,
+        };
+      } else {
+        delete nextDateWindows[normalizedWindowKey];
+      }
+
+      const nextAttendanceWindows = { ...(currentState.employeeAttendanceWindows ?? {}) };
+      if (Object.keys(nextDateWindows).length) {
+        nextAttendanceWindows[normalizedDateKey] = nextDateWindows;
+      } else {
+        delete nextAttendanceWindows[normalizedDateKey];
+      }
+
+      return {
+        ...currentState,
+        employeeAttendanceWindows: nextAttendanceWindows,
+      };
+    });
+
+    return {
+      employee: employees.find((entry) => entry.id === normalizedEmployeeId) ?? null,
+      time: targetWindow.time,
+      dateKey: normalizedDateKey,
+    };
   };
 
   const removeEmployeeFromBlock = (blockId, employeeId) => {
@@ -1116,7 +1381,7 @@ export function AppStateProvider({ children }) {
     }
 
     const employeesById = buildEmployeesById(employees);
-    if (!isEmployeeScheduleEligible(employeesById.get(employeeId), targetBlock.dateKey, employeeAvailabilityCalendar)) {
+    if (!isEmployeeEligibleForScheduleBlock(employeesById.get(employeeId), targetBlock, employeeAttendanceWindows, employeeAvailabilityCalendar)) {
       return null;
     }
 
@@ -1137,12 +1402,6 @@ export function AppStateProvider({ children }) {
         }
         if (entry.id === targetBlockId) {
           return nextTargetBlock;
-        }
-        if (entry.dateKey === targetBlock.dateKey) {
-          return normalizeBlock({
-            ...entry,
-            employeeIds: entry.employeeIds.filter((entryEmployeeId) => entryEmployeeId !== employeeId),
-          }, employeesById, entry.dateKey);
         }
         return entry;
       }),
@@ -1166,7 +1425,7 @@ export function AppStateProvider({ children }) {
     }
 
     const selectedIds = employees
-      .filter((employee) => isEmployeeScheduleEligible(employee, targetDateKey, employeeAvailabilityCalendar) && !block.employeeIds.includes(employee.id) && !getTimeBlocksForDate(timeBlocks, targetDateKey).some((entry) => entry.id !== block.id && entry.employeeIds.includes(employee.id)))
+      .filter((employee) => isEmployeeEligibleForScheduleBlock(employee, { ...block, dateKey: targetDateKey }, employeeAttendanceWindows, employeeAvailabilityCalendar) && !block.employeeIds.includes(employee.id))
       .map((employee) => ({
         employee,
         score: scoreEmployeeForBlock(employee, block),
@@ -1198,30 +1457,26 @@ export function AppStateProvider({ children }) {
 
   const saveTimeBlock = (blockInput) => {
     const startTime = normalizeClockValue(blockInput.startTime);
-    const presetKey = String(blockInput.roundPresetKey ?? getScheduleShiftPresetKey(startTime, `${blockInput.title ?? ''} ${(blockInput.tasks ?? []).join(' ')}`));
-    const preset = getScheduleShiftPreset(presetKey);
-    const endTime = preset.endTime;
-    const derivedTimeLabel = buildBlockTimeLabel(preset.startTime, preset.endTime);
+    const endTime = normalizeClockValue(blockInput.endTime);
+    const derivedTimeLabel = buildBlockTimeLabel(startTime, endTime);
     const normalizedInput = {
       ...blockInput,
       dateKey: String(blockInput.dateKey ?? formatDateKey()),
       time: derivedTimeLabel || String(blockInput.time ?? '').trim(),
-      startTime: preset.startTime,
+      startTime,
       endTime,
-      roundPresetKey: preset.key,
-      roundLabel: preset.label,
-      title: String(blockInput.title ?? '').trim() || preset.defaultTitle,
+      roundPresetKey: String(blockInput.roundPresetKey ?? getScheduleShiftPresetKey(startTime, blockInput.roundLabel)),
+      roundLabel: String(blockInput.roundLabel ?? '').trim(),
+      title: String(blockInput.title ?? '').trim(),
       required: Math.min(MAX_EMPLOYEES, Number(blockInput.required) || 0),
-      tasks: dedupeTasksWithDefaults(blockInput.tasks.map((task) => task.trim()).filter(Boolean), preset.key),
+      tasks: blockInput.tasks.map((task) => task.trim()).filter(Boolean),
     };
 
     if (!normalizedInput.time || !normalizedInput.title || !normalizedInput.roundLabel || normalizedInput.required <= 0) {
       return null;
     }
 
-    const existingBlock = normalizedInput.id
-      ? timeBlocks.find((entry) => entry.id === normalizedInput.id)
-      : timeBlocks.find((entry) => entry.dateKey === normalizedInput.dateKey && String(entry.roundPresetKey) === String(normalizedInput.roundPresetKey));
+    const existingBlock = normalizedInput.id ? timeBlocks.find((entry) => entry.id === normalizedInput.id) : null;
     const nextBlock = normalizeBlock({
       id: existingBlock?.id ?? createDateScopedBlockId(normalizedInput.dateKey, Date.now()),
       employeeIds: existingBlock?.employeeIds ?? [],
@@ -1253,10 +1508,106 @@ export function AppStateProvider({ children }) {
     return block;
   };
 
-  const copyWeekSchedule = (sourceDateKey, weekOffset = 1) => {
+  const deleteTimeWindow = (blockIds, summaryOverrides = {}) => {
+    const uniqueBlockIds = [...new Set(blockIds ?? [])];
+    const targetBlocks = timeBlocks.filter((entry) => uniqueBlockIds.includes(entry.id));
+    if (!targetBlocks.length) {
+      return null;
+    }
+
+    setState((currentState) => ({
+      ...currentState,
+      timeBlocks: currentState.timeBlocks.filter((entry) => !uniqueBlockIds.includes(entry.id)),
+      employeeAttendanceWindows: (() => {
+        const windowDateKey = String(targetBlocks[0]?.dateKey ?? formatDateKey());
+        const windowKey = getAttendanceWindowKey(targetBlocks[0] ?? {});
+        const nextDateWindows = { ...(currentState.employeeAttendanceWindows?.[windowDateKey] ?? {}) };
+        delete nextDateWindows[windowKey];
+        if (!Object.keys(nextDateWindows).length) {
+          const nextAttendanceWindows = { ...(currentState.employeeAttendanceWindows ?? {}) };
+          delete nextAttendanceWindows[windowDateKey];
+          return nextAttendanceWindows;
+        }
+
+        return {
+          ...(currentState.employeeAttendanceWindows ?? {}),
+          [windowDateKey]: nextDateWindows,
+        };
+      })(),
+    }));
+
+    const startTime = targetBlocks.map((block) => getBlockStartLabel(block)).filter(Boolean).sort()[0] ?? '';
+    const endTime = targetBlocks.map((block) => getBlockEndLabel(block)).filter(Boolean).sort().at(-1) ?? '';
+
+    return {
+      ...targetBlocks[0],
+      roundLabel: String(summaryOverrides.roundLabel ?? getBlockRoundLabel(targetBlocks[0])).trim(),
+      time: String(summaryOverrides.time ?? buildBlockTimeLabel(startTime, endTime) ?? targetBlocks[0].time).trim(),
+      title: String(summaryOverrides.title ?? targetBlocks[0].title).trim(),
+      deletedCount: targetBlocks.length,
+    };
+  };
+
+  const buildScheduleAttendanceSyncSummary = (currentState) => {
+    const employeesById = buildEmployeesById(currentState.employees);
+    let removedCount = 0;
+    let updatedBlockCount = 0;
+
+    const nextTimeBlocks = currentState.timeBlocks.map((block) => {
+      const nextEmployeeIds = block.employeeIds.filter((employeeId) => isEmployeeEligibleForScheduleBlock(
+        employeesById.get(employeeId),
+        block,
+        currentState.employeeAttendanceWindows,
+        currentState.employeeAvailabilityCalendar,
+      ));
+
+      if (nextEmployeeIds.length === block.employeeIds.length) {
+        return block;
+      }
+
+      removedCount += block.employeeIds.length - nextEmployeeIds.length;
+      updatedBlockCount += 1;
+      return normalizeBlock({ ...block, employeeIds: nextEmployeeIds }, employeesById, block.dateKey);
+    });
+
+    return {
+      removedCount,
+      updatedBlockCount,
+      nextTimeBlocks,
+    };
+  };
+
+  const getScheduleAttendanceSyncSummary = () => buildScheduleAttendanceSyncSummary(state);
+
+  const syncScheduleAssignmentsWithAttendance = () => {
+    let removedCount = 0;
+    let updatedBlockCount = 0;
+
+    setState((currentState) => {
+      const summary = buildScheduleAttendanceSyncSummary(currentState);
+      removedCount = summary.removedCount;
+      updatedBlockCount = summary.updatedBlockCount;
+
+      if (!updatedBlockCount) {
+        return currentState;
+      }
+
+      return {
+        ...currentState,
+        timeBlocks: summary.nextTimeBlocks,
+      };
+    });
+
+    return {
+      removedCount,
+      updatedBlockCount,
+    };
+  };
+
+  const copyWeekSchedule = (sourceDateKey, dayOffset = 7) => {
     const sourceWeekDateKeys = getWeekDateKeys(sourceDateKey ?? formatDateKey());
     const sourceWeekSet = new Set(sourceWeekDateKeys);
-    const targetWeekDateKeys = sourceWeekDateKeys.map((dateKey) => formatDateKey(addDays(parseDateKeyValue(dateKey), weekOffset * 7)));
+    const targetWeekDateKeys = sourceWeekDateKeys.map((dateKey) => formatDateKey(addDays(parseDateKeyValue(dateKey), dayOffset)));
     const targetWeekSet = new Set(targetWeekDateKeys);
     const targetDateBySourceDate = new Map(sourceWeekDateKeys.map((dateKey, index) => [dateKey, targetWeekDateKeys[index]]));
     const sourceBlocks = timeBlocks.filter((block) => sourceWeekSet.has(block.dateKey));
@@ -1284,6 +1635,11 @@ export function AppStateProvider({ children }) {
 
       return {
         ...currentState,
+        employeeAttendanceWindows: Object.fromEntries(Object.entries(currentState.employeeAttendanceWindows ?? {}).filter(([dateKey]) => !targetWeekSet.has(dateKey)).concat(targetWeekDateKeys.map((targetDateKey, index) => {
+          const sourceDateKey = sourceWeekDateKeys[index];
+          const sourceWindows = currentState.employeeAttendanceWindows?.[sourceDateKey];
+          return [targetDateKey, sourceWindows ? JSON.parse(JSON.stringify(sourceWindows)) : undefined];
+        }).filter(([, value]) => value))),
         timeBlocks: [...preservedBlocks, ...copiedBlocks],
       };
     });
@@ -1321,6 +1677,15 @@ export function AppStateProvider({ children }) {
 
       return {
         ...currentState,
+        employeeAttendanceWindows: (() => {
+          const nextAttendanceWindows = { ...(currentState.employeeAttendanceWindows ?? {}) };
+          if (currentState.employeeAttendanceWindows?.[normalizedSourceDateKey]) {
+            nextAttendanceWindows[targetDateKey] = JSON.parse(JSON.stringify(currentState.employeeAttendanceWindows[normalizedSourceDateKey]));
+          } else {
+            delete nextAttendanceWindows[targetDateKey];
+          }
+          return nextAttendanceWindows;
+        })(),
         timeBlocks: [...preservedBlocks, ...copiedBlocks],
       };
     });
@@ -1555,6 +1920,7 @@ export function AppStateProvider({ children }) {
       return {
         ...currentState,
         employeeAvailabilityCalendar: nextCalendar,
+        employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(currentState.employeeAttendanceWindows, null, buildEmployeesById(currentState.employees), nextCalendar),
       };
     });
 
@@ -1598,6 +1964,7 @@ export function AppStateProvider({ children }) {
       return {
         ...currentState,
         employeeAvailabilityCalendar: nextCalendar,
+        employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(currentState.employeeAttendanceWindows, null, buildEmployeesById(currentState.employees), nextCalendar),
       };
     });
 
@@ -1682,6 +2049,7 @@ export function AppStateProvider({ children }) {
       return {
         ...currentState,
         employees: nextEmployees,
+        employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(currentState.employeeAttendanceWindows, new Set(nextEmployees.map((employee) => employee.id)), nextEmployeesById, currentState.employeeAvailabilityCalendar),
         timeBlocks: currentState.timeBlocks.map((block) => normalizeBlock({
           ...block,
           employeeIds: block.employeeIds.filter((entry) => isEmployeeScheduleEligible(nextEmployeesById.get(entry), block.dateKey, currentState.employeeAvailabilityCalendar)),
@@ -1730,6 +2098,7 @@ export function AppStateProvider({ children }) {
         employees: nextEmployees,
         employeePortalSessionId: currentState.employeePortalSessionId === employeeId ? null : currentState.employeePortalSessionId,
         employeeAvailabilityCalendar: nextCalendar,
+        employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(currentState.employeeAttendanceWindows, new Set(nextEmployees.map((entry) => entry.id)), nextEmployeesById, nextCalendar),
         timeBlocks: currentState.timeBlocks.map((block) => normalizeBlock({
           ...block,
           employeeIds: block.employeeIds.filter((entry) => entry !== employeeId),
@@ -1825,6 +2194,7 @@ export function AppStateProvider({ children }) {
   const value = {
     calendarDaySettings,
     employeeAvailabilityCalendar,
+    employeeAttendanceWindows,
     employeePortalSessionId,
     employees,
     inventoryHistory,
@@ -1835,11 +2205,16 @@ export function AppStateProvider({ children }) {
     requests,
     settings,
     addEmployeesToBlock,
+    addEmployeesToWindow,
+    removeEmployeeFromAttendanceWindow,
     removeEmployeeFromBlock,
     moveEmployeeToBlock,
     autoAssignEmployeesToBlock,
     saveTimeBlock,
     deleteTimeBlock,
+    deleteTimeWindow,
+    getScheduleAttendanceSyncSummary,
+    syncScheduleAssignmentsWithAttendance,
     copyDaySchedule,
     copyWeekSchedule,
     createRequest,

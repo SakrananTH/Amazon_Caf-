@@ -21,6 +21,7 @@ function unwrapResult(result, label) {
 
 export async function loadAppStateFromSupabase() {
   const client = requireSupabase();
+  let mappedAppSettings = null;
 
   const [
     employeesResult,
@@ -46,9 +47,13 @@ export async function loadAppStateFromSupabase() {
     client.from('app_settings').select('*').limit(1).maybeSingle(),
   ]);
 
+  mappedAppSettings = mapSettingsRow(unwrapResult(settingsResult, 'app_settings'));
+
   return {
+    version: mappedAppSettings?.version ?? null,
     employees: unwrapResult(employeesResult, 'employees').map(mapEmployeeRow),
     employeeAvailabilityCalendar: mapEmployeeAvailabilityRows(unwrapResult(availabilityResult, 'employee_availability')),
+    employeeAttendanceWindows: mappedAppSettings?.employeeAttendanceWindows ?? {},
     calendarDaySettings: mapCalendarDaySettingsRows(unwrapResult(calendarSettingsResult, 'calendar_day_settings')),
     timeBlocks: mapScheduleRows(
       unwrapResult(scheduleBlocksResult, 'schedule_blocks'),
@@ -58,6 +63,6 @@ export async function loadAppStateFromSupabase() {
     inventoryItems: mapInventoryItemRows(unwrapResult(inventoryItemsResult, 'inventory_items')),
     inventoryHistory: mapInventoryHistoryRows(unwrapResult(inventoryHistoryResult, 'inventory_history')),
     issueReports: mapIssueRows(unwrapResult(issueReportsResult, 'issue_reports')),
-    settings: mapSettingsRow(unwrapResult(settingsResult, 'app_settings')),
+    settings: mappedAppSettings?.settings ?? mapSettingsRow(null).settings,
   };
 }

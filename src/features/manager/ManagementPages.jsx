@@ -1073,9 +1073,30 @@ export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
       };
     }), [inventoryItems]);
 
+  const expiringAlerts = useMemo(() => [...inventoryItems]
+    .filter((item) => getDaysUntilExpiry(item.expiresOn) <= 5)
+    .sort((leftItem, rightItem) => getDaysUntilExpiry(leftItem.expiresOn) - getDaysUntilExpiry(rightItem.expiresOn))
+    .map((item) => {
+      const expiryDays = getDaysUntilExpiry(item.expiresOn);
+      const isExpired = expiryDays <= 0;
+
+      return {
+        id: `expiry-${item.id}`,
+        kind: 'expiry',
+        issueId: null,
+        title: item.name,
+        detail: isExpired ? 'หมดอายุแล้ว ต้องแยกตรวจทันที' : `หมดอายุอีก ${expiryDays} วัน`,
+        action: isExpired ? 'หมดอายุแล้ว' : 'ใกล้หมดอายุ',
+        tone: isExpired || expiryDays <= 2 ? 'danger' : 'warning',
+        severity: isExpired ? 'สูง' : 'กลาง',
+        reporter: null,
+        extraDetail: `คงเหลือ ${Number(item.quantity ?? 0)} ${item.unit}${item.category ? ` • หมวดหมู่ ${item.category}` : ''}`,
+      };
+    }), [inventoryItems]);
+
   const sortAlerts = (sourceAlerts) => {
     const toneWeight = { danger: 3, warning: 2, ok: 1 };
-    const kindWeight = { issue: 2, stock: 1 };
+    const kindWeight = { issue: 3, expiry: 2, stock: 1 };
 
     return [...sourceAlerts].sort((leftAlert, rightAlert) => {
       const toneDiff = (toneWeight[rightAlert.tone] ?? 0) - (toneWeight[leftAlert.tone] ?? 0);
@@ -1092,7 +1113,7 @@ export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
     });
   };
 
-  const currentAlerts = useMemo(() => sortAlerts([...activeIssueAlerts, ...lowStockAlerts]), [activeIssueAlerts, lowStockAlerts]);
+  const currentAlerts = useMemo(() => sortAlerts([...activeIssueAlerts, ...expiringAlerts, ...lowStockAlerts]), [activeIssueAlerts, expiringAlerts, lowStockAlerts]);
   const historyAlerts = useMemo(() => sortAlerts(resolvedIssueAlerts), [resolvedIssueAlerts]);
 
   const openIssues = useMemo(() => issueReports.filter((issue) => issue.status !== 'ดำเนินการแล้ว'), [issueReports]);
@@ -1101,10 +1122,12 @@ export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
   const highSeverityIssues = useMemo(() => openIssues.filter((issue) => issue.severity === 'สูง'), [openIssues]);
   const resolvedIssues = useMemo(() => issueReports.filter((issue) => issue.status === 'ดำเนินการแล้ว'), [issueReports]);
   const resolvedHighSeverityIssues = useMemo(() => resolvedIssues.filter((issue) => issue.severity === 'สูง'), [resolvedIssues]);
+  const riskInventoryAlerts = useMemo(() => sortAlerts([...expiringAlerts, ...lowStockAlerts]), [expiringAlerts, lowStockAlerts]);
   const filterTabs = [
     { value: 'all', label: 'ทั้งหมด' },
     { value: 'urgent', label: 'ด่วน' },
     { value: 'issues', label: 'ปัญหา' },
+    { value: 'expiry', label: 'ใกล้หมดอายุ' },
     { value: 'stock', label: 'สต็อกต่ำ' },
     { value: 'history', label: 'ประวัติ' },
   ];
@@ -1121,6 +1144,10 @@ export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
 
       if (alertFilter === 'issues') {
         return currentAlerts.filter((alert) => alert.kind === 'issue');
+      }
+
+      if (alertFilter === 'expiry') {
+        return currentAlerts.filter((alert) => alert.kind === 'expiry');
       }
 
       if (alertFilter === 'stock') {
@@ -1145,11 +1172,11 @@ export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
   const panelTitle = isHistoryFilter ? 'ประวัติแจ้งเตือนเก่า' : 'สิ่งที่ต้องดูตอนนี้';
   const panelDescription = isHistoryFilter
     ? 'ดูรายการปัญหาที่ปิดงานแล้วและค้นย้อนหลังได้จากหน้าเดียว'
-    : 'กรอง ค้นหา และติดตามทั้งปัญหากับรายการสต็อกต่ำได้จากหน้าเดียว';
+    : 'กรอง ค้นหา และติดตามทั้งปัญหา ของใกล้หมดอายุ และรายการสต็อกต่ำได้จากหน้าเดียว';
   const shellTitle = isHistoryFilter ? 'คลังประวัติแจ้งเตือน' : 'ศูนย์แจ้งเตือนร้าน';
   const shellDescription = isHistoryFilter
     ? 'รวมรายการที่ปิดงานแล้วเพื่อย้อนดูบริบทเดิมได้ โดยไม่ปะปนกับงานค้างปัจจุบัน'
-    : 'รวมปัญหาที่พนักงานแจ้งและสต็อกที่ต่ำกว่าจุดเตือน เพื่อให้ผู้จัดการติดตามงานจากหน้าเดียว';
+    : 'รวมปัญหาที่พนักงานแจ้ง ของใกล้หมดอายุ และสต็อกที่ต่ำกว่าจุดเตือน เพื่อให้ผู้จัดการติดตามงานจากหน้าเดียว';
   const visibleAlerts = isHistoryFilter ? historyAlerts : currentAlerts;
 
   return (
@@ -1162,7 +1189,7 @@ export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
         </div>
         <div className="compact-page-stats">
           <span className={`compact-page-stat ${isHistoryFilter ? (resolvedIssues.length ? 'ok' : 'warning') : (openIssues.length ? 'danger' : 'ok')}`}>{isHistoryFilter ? `ปิดงานแล้ว ${resolvedIssues.length}` : `ปัญหาค้าง ${openIssues.length}`}</span>
-          <span className={`compact-page-stat ${isHistoryFilter ? (resolvedHighSeverityIssues.length ? 'warning' : 'ok') : (lowStockAlerts.length ? 'warning' : 'ok')}`}>{isHistoryFilter ? `เคสหนักย้อนหลัง ${resolvedHighSeverityIssues.length}` : `สต็อกต่ำ ${lowStockAlerts.length}`}</span>
+          <span className={`compact-page-stat ${isHistoryFilter ? (resolvedHighSeverityIssues.length ? 'warning' : 'ok') : (riskInventoryAlerts.length ? 'warning' : 'ok')}`}>{isHistoryFilter ? `เคสหนักย้อนหลัง ${resolvedHighSeverityIssues.length}` : `สต็อกเสี่ยง ${riskInventoryAlerts.length}`}</span>
           <span className={`compact-page-stat ${isHistoryFilter ? (issueReports.length ? 'ok' : 'warning') : (highSeverityIssues.length ? 'danger' : 'ok')}`}>{isHistoryFilter ? `แจ้งเตือนรวม ${issueReports.length}` : `รุนแรงสูง ${highSeverityIssues.length}`}</span>
         </div>
       </section>
@@ -1238,10 +1265,10 @@ export function ManagerNotificationsPage({ initialFilter = 'all' } = {}) {
             <article className="notification-summary-card warning">
               <div className="notification-summary-card-head">
                 <span className="notification-summary-icon warning"><PackageSearch size={16} /></span>
-                <span className="notification-summary-label">{isHistoryFilter ? 'รุนแรงสูง' : 'สต็อกต่ำ'}</span>
+                <span className="notification-summary-label">{isHistoryFilter ? 'รุนแรงสูง' : 'สต็อกเสี่ยง'}</span>
               </div>
-              <strong>{isHistoryFilter ? resolvedHighSeverityIssues.length : lowStockAlerts.length}</strong>
-              <small>{isHistoryFilter ? (resolvedHighSeverityIssues[0] ? resolvedHighSeverityIssues[0].title : 'ยังไม่มีเคสหนักในประวัติ') : (lowStockAlerts[0] ? lowStockAlerts[0].title : 'ยังไม่มีสินค้าต่ำกว่าจุดเตือน')}</small>
+              <strong>{isHistoryFilter ? resolvedHighSeverityIssues.length : riskInventoryAlerts.length}</strong>
+              <small>{isHistoryFilter ? (resolvedHighSeverityIssues[0] ? resolvedHighSeverityIssues[0].title : 'ยังไม่มีเคสหนักในประวัติ') : (riskInventoryAlerts[0] ? riskInventoryAlerts[0].title : 'ยังไม่มีของใกล้หมดอายุหรือสินค้าต่ำกว่าจุดเตือน')}</small>
             </article>
             <article className="notification-summary-card warning">
               <div className="notification-summary-card-head">

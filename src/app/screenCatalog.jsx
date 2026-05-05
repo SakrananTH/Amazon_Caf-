@@ -7,7 +7,7 @@ import { EmployeeMobileHomePage, EmployeeMobileInventoryPage, EmployeeMobileIssu
 import { AddEmployeeSheet, RemoveConfirm, RequestHelp, ScheduleBlockEditor } from '../features/manager/ModalScreens.jsx';
 import WeeklySchedulePage from '../features/manager/WeeklySchedulePage.jsx';
 import { routePaths } from './routes.js';
-import { isEmployeeScheduleEligible, useAppState } from './state/AppStateContext.jsx';
+import { isEmployeeEligibleForAttendanceWindow, isEmployeeEligibleForScheduleBlock, isEmployeeScheduleEligible, useAppState } from './state/AppStateContext.jsx';
 
 function findDefaultAddBlock(blocks) {
   return blocks.find((block) => block.employeeIds.length < block.required) ?? blocks[0] ?? null;
@@ -63,11 +63,11 @@ function EmployeeLoginRoutePage() {
 }
 
 function DesktopSchedulePage() {
-  const { autoAssignEmployeesToBlock, copyDaySchedule, employeeAvailabilityCalendar, employees, moveEmployeeToBlock, timeBlocks } = useAppState();
+  const { autoAssignEmployeesToBlock, copyDaySchedule, employeeAttendanceWindows, employeeAvailabilityCalendar, employees, moveEmployeeToBlock, timeBlocks } = useAppState();
   return (
     <ManagerDesktopGate>
       <div className="screen-stage desktop">
-        <DesktopSchedule blocks={timeBlocks} employees={employees} employeeAvailabilityCalendar={employeeAvailabilityCalendar} moveEmployeeToBlock={moveEmployeeToBlock} autoAssignEmployeesToBlock={autoAssignEmployeesToBlock} copyDaySchedule={copyDaySchedule} />
+        <DesktopSchedule blocks={timeBlocks} employees={employees} employeeAttendanceWindows={employeeAttendanceWindows} employeeAvailabilityCalendar={employeeAvailabilityCalendar} moveEmployeeToBlock={moveEmployeeToBlock} autoAssignEmployeesToBlock={autoAssignEmployeesToBlock} copyDaySchedule={copyDaySchedule} />
       </div>
     </ManagerDesktopGate>
   );
@@ -134,25 +134,55 @@ function EmployeeInventoryIncomingRoutePage() {
 function AddEmployeePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { addEmployeesToBlock, employeeAvailabilityCalendar, employees, timeBlocks } = useAppState();
+  const { addEmployeesToBlock, addEmployeesToWindow, employeeAttendanceWindows, employeeAvailabilityCalendar, employees, timeBlocks } = useAppState();
   const returnTo = location.state?.returnTo ?? routePaths.desktopSchedule;
   const selectedDateKey = location.state?.selectedDateKey ?? null;
-  const block = timeBlocks.find((entry) => entry.id === location.state?.blockId) ?? findDefaultAddBlock(timeBlocks);
-  const availableEmployees = block ? employees.filter((employee) => !block.employeeIds.includes(employee.id) && isEmployeeScheduleEligible(employee, selectedDateKey, employeeAvailabilityCalendar)) : [];
+  const blockIds = Array.isArray(location.state?.blockIds) ? location.state.blockIds : [];
+  const isAttendanceWindowFlow = blockIds.length > 0;
+  const selectedBlocks = blockIds.length ? timeBlocks.filter((entry) => blockIds.includes(entry.id)) : [];
+  const block = timeBlocks.find((entry) => entry.id === location.state?.blockId) ?? selectedBlocks[0] ?? findDefaultAddBlock(timeBlocks);
+  const displayBlock = selectedBlocks.length
+    ? {
+        ...block,
+        roundLabel: String(location.state?.roundLabel ?? block?.roundLabel ?? '').trim(),
+        time: String(location.state?.timeLabel ?? block?.time ?? '').trim(),
+        title: String(location.state?.windowLabel ?? block?.title ?? '').trim(),
+      }
+    : block;
+  const targetBlocks = selectedBlocks.length ? selectedBlocks : block ? [block] : [];
+  const availableEmployees = targetBlocks.length
+    ? employees.filter((employee) => {
+        if (isAttendanceWindowFlow) {
+          return isEmployeeEligibleForAttendanceWindow(employee, targetBlocks[0], employeeAttendanceWindows, employeeAvailabilityCalendar);
+        }
+
+        return !targetBlocks[0].employeeIds.includes(employee.id) && isEmployeeEligibleForScheduleBlock(employee, targetBlocks[0], employeeAttendanceWindows, employeeAvailabilityCalendar);
+      })
+    : [];
 
   return (
     <ManagerDesktopGate>
 	  <div className="screen-stage standalone-modal">
         <AddEmployeeSheet
           employees={availableEmployees}
-          block={block}
-          onApply={(selectedIds) => {
-            if (!block) {
+          block={displayBlock}
+          emptyStateMessage={isAttendanceWindowFlow
+            ? 'ยังไม่มีพนักงานให้เลือกในช่วงนี้ เพราะอาจถูกลงเวลาเข้างานช่วงอื่นแล้ว หรืออยู่ในสถานะลา/ขาด/พักงาน'
+            : 'ต้องลงเวลาเข้างานก่อน หรือเวลาเลิกงานของพนักงานยังไม่ครอบคลุมช่วงงานนี้'}
+          onConfirm={(selectedIds) => {
+            if (!displayBlock) {
               return '';
             }
 
-            const updatedBlock = addEmployeesToBlock(block.id, selectedIds);
-            return updatedBlock ? `เพิ่มพนักงาน ${selectedIds.length} คนเข้าสู่ ${updatedBlock.roundLabel} ${updatedBlock.time}` : '';
+            if (isAttendanceWindowFlow) {
+              return addEmployeesToWindow(targetBlocks.map((entry) => entry.id), selectedIds, {
+                roundLabel: displayBlock.roundLabel,
+                time: displayBlock.time,
+                title: displayBlock.title,
+              });
+            }
+
+            return block ? addEmployeesToBlock(block.id, selectedIds) : '';
           }}
           onClose={() => navigate(returnTo, { state: { selectedDateKey } })}
         />
@@ -354,8 +384,8 @@ export const screenCatalog = [
   {
     id: 'employee-schedule',
     path: routePaths.employeeSchedule,
-    title: 'กะของฉัน',
-    description: 'มุมมองกะของพนักงานแบบมือถือ',
+    title: 'เวลาเข้างานของฉัน',
+    description: 'มุมมองเวลาเข้างานและช่วงงานในตารางของพนักงานแบบมือถือ',
     component: EmployeeScheduleRoutePage,
   },
   {

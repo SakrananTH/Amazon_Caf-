@@ -51,9 +51,11 @@ function formatTimestampValue(value) {
   return date.toISOString();
 }
 
-function serializeSettings(settings = {}) {
+function serializeAppSettings(state = {}) {
+  const settings = state.settings ?? {};
   return {
     id: true,
+    state_version: Number.isFinite(Number(state.version)) ? Number(state.version) : 8,
     store_name: String(settings.storeName ?? 'Amazon Cafe').trim() || 'Amazon Cafe',
     manager_name: String(settings.managerName ?? 'ผู้จัดการร้าน').trim() || 'ผู้จัดการร้าน',
     manager_phone: String(settings.managerPhone ?? '').trim(),
@@ -63,6 +65,7 @@ function serializeSettings(settings = {}) {
     notifications_enabled: Boolean(settings.notificationsEnabled),
     auto_close_resolved_requests: Boolean(settings.autoCloseResolvedRequests),
     last_saved_at: String(settings.lastSavedAt ?? '').trim() || null,
+    employee_attendance_windows: state.employeeAttendanceWindows ?? {},
   };
 }
 
@@ -211,7 +214,7 @@ export function createPersistedStatePayload(state) {
   const { scheduleAssignments, scheduleBlocks } = serializeTimeBlocks(state.timeBlocks);
 
   return {
-    appSettings: serializeSettings(state.settings),
+    appSettings: serializeAppSettings(state),
     employees: serializeEmployees(state.employees),
     employeeAvailability: serializeEmployeeAvailability(state.employeeAvailabilityCalendar),
     calendarDaySettings: serializeCalendarDaySettings(state.calendarDaySettings),

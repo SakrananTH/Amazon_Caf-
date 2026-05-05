@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import DesktopWorkspace from './DesktopWorkspace.jsx';
 import EmployeeChip from '../shared/EmployeeChip.jsx';
 import { routePaths } from '../../app/routes.js';
-import { computeBlockStatus, formatDateKey, getBlockRoundLabel, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeScheduleEligible } from '../../app/state/AppStateContext.jsx';
+import { computeBlockStatus, formatDateKey, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeEligibleForScheduleBlock, isEmployeeScheduleEligible } from '../../app/state/AppStateContext.jsx';
 
 function getRoundStatusLabel(required, assigned) {
   const shortage = Math.max(required - assigned, 0);
@@ -17,7 +17,7 @@ function getRoundStatusLabel(required, assigned) {
   return `ขาด ${shortage} คน`;
 }
 
-export default function DesktopSchedule({ blocks, employees, employeeAvailabilityCalendar, moveEmployeeToBlock, autoAssignEmployeesToBlock, copyDaySchedule }) {
+export default function DesktopSchedule({ blocks, employees, employeeAttendanceWindows, employeeAvailabilityCalendar, moveEmployeeToBlock, autoAssignEmployeesToBlock, copyDaySchedule }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [dayOffset, setDayOffset] = useState(0);
@@ -126,7 +126,7 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
         <div className="schedule-board-note panel-card compact-page-bar">
           <div className="compact-page-lead">
             <strong>จัดการตารางตามกะงาน</strong>
-            <p>แต่ละวันจะมีกะเช้าและกะสายเท่านั้น ลากชื่อพนักงานเพื่อย้ายกะและเช็กได้ทันทีว่ากะไหนยังขาดคน</p>
+            <p>แต่ละวันแบ่งเป็นหลายช่วงงานตามเวลาเดิม และลงคนได้เฉพาะผู้ที่มีเวลาเข้างานครอบคลุมช่วงนั้นเท่านั้น</p>
           </div>
           <div className="compact-page-stats">
             <span className="compact-page-stat">Coverage {coverageRate}%</span>
@@ -157,23 +157,21 @@ export default function DesktopSchedule({ blocks, employees, employeeAvailabilit
             const personalLeaveCount = assignedEmployees.filter((employee) => getAvailabilityMeta(employee).value === 'personal_leave').length;
             const sickLeaveCount = assignedEmployees.filter((employee) => getAvailabilityMeta(employee).value === 'sick_leave').length;
             const absentCount = assignedEmployees.filter((employee) => getAvailabilityMeta(employee).value === 'absent').length;
-            const availableForAuto = employees.filter((employee) => isAssignableOnBoardDate(employee) && !block.employeeIds.includes(employee.id)).length;
+            const availableForAuto = employees.filter((employee) => isEmployeeEligibleForScheduleBlock(employee, block, employeeAttendanceWindows, employeeAvailabilityCalendar) && !block.employeeIds.includes(employee.id)).length;
             const isDanger = status === 'danger';
             const isWarning = status === 'warning';
             const StatusIcon = isDanger ? AlertCircle : isWarning ? TriangleAlert : CheckCircle2;
             const isDropTarget = dragState?.targetBlockId === block.id;
-            const roundLabel = getBlockRoundLabel(block);
-
             return (
               <article key={block.id} className={`column schedule-col ${status}`}>
                 <div className="col-header">
                   <div className="col-time-row">
-                    <h3 className={`col-time ${isDanger ? 'text-danger' : ''}`}>{roundLabel}</h3>
+                    <h3 className={`col-time ${isDanger ? 'text-danger' : ''}`}>{block.time}</h3>
                     <span className={`status-chip ${status}`}>
                       {getRoundStatusLabel(required, assigned)}
                     </span>
                   </div>
-                  <div className="col-time-meta">{block.time}</div>
+                  <div className="col-time-meta">ช่วงงานในตาราง</div>
                   <h4 className="col-title">{block.title}</h4>
                   <div className="col-status-row">
                     <div className="col-req-text">ต้องมี {required} คน</div>

@@ -31,6 +31,40 @@ function normalizeTextArray(value) {
   return Array.isArray(value) ? value.filter(Boolean).map((item) => String(item)) : [];
 }
 
+function normalizeAttendanceWindows(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce((dateAccumulator, [dateKey, windows]) => {
+    if (!windows || typeof windows !== 'object' || Array.isArray(windows)) {
+      return dateAccumulator;
+    }
+
+    const normalizedWindows = Object.entries(windows).reduce((windowAccumulator, [windowKey, windowValue]) => {
+      if (!windowValue || typeof windowValue !== 'object') {
+        return windowAccumulator;
+      }
+
+      const employeeIds = [...new Set((windowValue.employeeIds ?? []).map((employeeId) => Number(employeeId)).filter(Number.isFinite))];
+      windowAccumulator[String(windowKey)] = {
+        key: String(windowValue.key ?? windowKey),
+        startTime: String(windowValue.startTime ?? '').trim(),
+        endTime: String(windowValue.endTime ?? '').trim(),
+        time: String(windowValue.time ?? '').trim(),
+        employeeIds,
+      };
+      return windowAccumulator;
+    }, {});
+
+    if (Object.keys(normalizedWindows).length) {
+      dateAccumulator[formatDateKey(dateKey)] = normalizedWindows;
+    }
+
+    return dateAccumulator;
+  }, {});
+}
+
 export function mapEmployeeRow(row) {
   return {
     id: Number(row.id),
@@ -151,14 +185,18 @@ export function mapIssueRows(rows) {
 
 export function mapSettingsRow(row) {
   return {
-    storeName: row?.store_name ?? 'Amazon Cafe',
-    managerName: row?.manager_name ?? 'ผู้จัดการร้าน',
-    managerPhone: row?.manager_phone ?? '',
-    managerPassword: row?.manager_password ?? '',
-    preferredView: row?.preferred_view ?? 'desktop',
-    shortageThreshold: row?.shortage_threshold ?? '1',
-    notificationsEnabled: row?.notifications_enabled ?? true,
-    autoCloseResolvedRequests: row?.auto_close_resolved_requests ?? false,
-    lastSavedAt: row?.last_saved_at ?? '',
+    version: Number.isFinite(Number(row?.state_version)) ? Number(row.state_version) : null,
+    employeeAttendanceWindows: normalizeAttendanceWindows(row?.employee_attendance_windows),
+    settings: {
+      storeName: row?.store_name ?? 'Amazon Cafe',
+      managerName: row?.manager_name ?? 'ผู้จัดการร้าน',
+      managerPhone: row?.manager_phone ?? '',
+      managerPassword: row?.manager_password ?? '',
+      preferredView: row?.preferred_view ?? 'desktop',
+      shortageThreshold: row?.shortage_threshold ?? '1',
+      notificationsEnabled: row?.notifications_enabled ?? true,
+      autoCloseResolvedRequests: row?.auto_close_resolved_requests ?? false,
+      lastSavedAt: row?.last_saved_at ?? '',
+    },
   };
 }

@@ -269,6 +269,25 @@ a, button {
   border-color: #86efac;
 }
 
+.action-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ghost-button .action-badge {
+  background: rgba(25, 107, 65, 0.1);
+}
+
 .user-icon {
   display: inline-flex;
   align-items: center;
@@ -423,7 +442,7 @@ a, button {
 .status-chip.attention,
 .attention .status-chip { color: #c2410c; background: #fdba74; }
 .status-chip.ok,
-.ok .status-chip { color: var(--success-text); background: #bbf7d0; }
+.ok .status-chip { color: var(--success-text); background: #ffffff; }
 
 /* HERO ASIDE */
 .ops-hero-aside {
@@ -1347,8 +1366,9 @@ a, button {
 
 .weekly-schedule-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 16px;
+  align-items: start;
 }
 
 .weekly-schedule-toolbar {
@@ -1377,6 +1397,7 @@ a, button {
 .weekly-schedule-day-card {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .weekly-schedule-day-head {
@@ -1458,6 +1479,11 @@ a, button {
   color: #166534;
   font-size: 12px;
   font-weight: 700;
+}
+
+.weekly-schedule-start-time {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.96);
 }
 
 .weekly-schedule-start-time.warning {
@@ -1546,16 +1572,33 @@ a, button {
   gap: 8px;
 }
 
-.weekly-schedule-round-employees span {
+.weekly-schedule-round-employees span,
+.weekly-schedule-employee-chip {
   display: inline-flex;
   align-items: center;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(240, 249, 255, 0.88);
-  border: 1px solid rgba(186, 230, 253, 0.92);
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.96);
   color: #0f172a;
   font-size: 12px;
   font-weight: 600;
+}
+
+.weekly-schedule-employee-chip {
+  gap: 6px;
+  cursor: pointer;
+}
+
+.weekly-schedule-employee-chip:hover {
+  background: #fff5f5;
+  border-color: rgba(226, 232, 240, 0.96);
+  color: #0f172a;
+}
+
+.weekly-schedule-employee-chip svg {
+  flex: 0 0 auto;
+  color: #dc2626;
 }
 
 .weekly-schedule-round-employees.empty span {
@@ -1567,11 +1610,41 @@ a, button {
 
 .weekly-schedule-round-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .weekly-schedule-round-actions .schedule-inline-link {
   margin-top: 0;
+}
+
+.weekly-schedule-round-actions button.schedule-inline-link {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.weekly-schedule-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.34);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.weekly-schedule-dialog-backdrop .flow-page-shell {
+  width: min(520px, calc(100vw - 32px));
+}
+
+@media (min-width: 1360px) {
+  .weekly-schedule-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .employee-mobile-week-toolbar {
@@ -3483,8 +3556,10 @@ a, button {
 }
 
 .schedule-copy-notice {
-  background: #ffffff;
-  border-color: #bbf7d0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
   color: var(--success-text);
 }
 
@@ -4398,10 +4473,108 @@ a, button {
   border-color: #86efac;
 }
 
+.employee-choice.rich-choice {
+  grid-template-columns: 40px minmax(0, 1fr) 24px;
+  align-items: start;
+  gap: 14px;
+}
+
+.employee-choice-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.96);
+}
+
+.employee-choice-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.employee-choice-headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.employee-choice-headline strong {
+  font-size: 15px;
+}
+
+.employee-choice-role {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.employee-choice-role.blue {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.employee-choice-role.green {
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.employee-choice-role.warn {
+  color: #a16207;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.employee-choice-role.lavender {
+  color: #7c3aed;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+}
+
 .employee-choice p {
   margin: 2px 0 0;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.employee-choice-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.employee-choice-code,
+.employee-choice-skill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.employee-choice-indicator {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.employee-choice-indicator.selected {
+  color: var(--success-text);
 }
 
 .checked {
@@ -5203,12 +5376,16 @@ a, button {
 
 .employee-mobile-search-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
   gap: 10px;
   margin-bottom: 10px;
 }
 
 .employee-mobile-search-field {
+  min-width: 0;
+}
+
+.employee-mobile-category-field {
   min-width: 0;
 }
 
@@ -5686,6 +5863,37 @@ a, button {
   border: 1px solid rgba(226, 232, 240, 0.92);
   font-size: 12px;
   color: var(--text-main);
+}
+
+.employee-mobile-block-detail {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+}
+
+.employee-mobile-block-detail strong,
+.employee-mobile-block-detail span,
+.employee-mobile-block-detail small {
+  margin: 0;
+}
+
+.employee-mobile-block-detail strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.employee-mobile-block-detail span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.employee-mobile-block-detail small {
+  font-size: 12px;
+  color: var(--text-main);
+  line-height: 1.5;
 }
 
 .employee-mobile-week-list.empty span,

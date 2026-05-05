@@ -1,8 +1,24 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle2, Search, X } from 'lucide-react';
-import { buildBlockTimeLabel, getBlockRoundLabel, scheduleShiftPresets } from '../../app/state/AppStateContext.jsx';
+import { buildBlockTimeLabel, getBlockEndLabel, getBlockRoundLabel, getBlockStartLabel, normalizeClockValue, scheduleShiftPresets } from '../../app/state/AppStateContext.jsx';
+import { getRolePresentation, stripRoleMetadataSkills } from '../shared/EmployeeChip.jsx';
 
-const allShiftDutyOptions = [...new Set(scheduleShiftPresets.flatMap((preset) => preset.defaultTasks))];
+const scheduleRoundPresets = [
+  ...scheduleShiftPresets.map((preset) => ({
+    key: preset.key,
+    label: `${preset.label} ${preset.startTime} - ${preset.endTime}`,
+    roundLabel: preset.label,
+    startTime: preset.startTime,
+    endTime: preset.endTime,
+  })),
+  {
+    key: 'custom',
+    label: 'กำหนดเอง',
+    roundLabel: 'รอบงาน',
+    startTime: '',
+    endTime: '',
+  },
+];
 
 function getEmployeeTagTone(role = '') {
   if (String(role).includes('ผู้จัดการ')) {
@@ -17,8 +33,8 @@ function getEmployeeTagTone(role = '') {
   return 'warn';
 }
 
-function findShiftPreset(presetKey) {
-  return scheduleShiftPresets.find((preset) => preset.key === presetKey) ?? scheduleShiftPresets[0];
+function findScheduleRoundPreset(presetKey = 'custom') {
+  return scheduleRoundPresets.find((preset) => preset.key === presetKey) ?? scheduleRoundPresets[scheduleRoundPresets.length - 1];
 }
 
 function formatBlockShiftSummary(block) {
@@ -26,11 +42,10 @@ function formatBlockShiftSummary(block) {
     return '';
   }
 
-  const shiftLabel = getBlockRoundLabel(block);
-  return [shiftLabel, block.time].filter(Boolean).join(' ');
+  return String(block.time ?? '').trim() || [getBlockStartLabel(block), getBlockEndLabel(block)].filter(Boolean).join(' - ');
 }
 
-export function AddEmployeeSheet({ block, employees, onClose, onConfirm }) {
+export function AddEmployeeSheet({ block, employees, emptyStateMessage = 'ไม่มีพนักงานที่เลือกเข้าช่วงงานนี้ได้', onApply, onClose, onConfirm }) {
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [summary, setSummary] = useState('');
@@ -49,7 +64,7 @@ export function AddEmployeeSheet({ block, employees, onClose, onConfirm }) {
       return;
     }
 
-    const updatedBlock = onConfirm(selectedIds);
+    const updatedBlock = onConfirm ? onConfirm(selectedIds) : onApply?.(selectedIds);
     if (!updatedBlock) {
       return;
     }
@@ -97,20 +112,39 @@ export function AddEmployeeSheet({ block, employees, onClose, onConfirm }) {
             <div className="selection-caption">เลือกแล้ว {selectedIds.length} คน</div>
             <div className="flow-list calm-flow-list">
               {filteredEmployees.map((employee) => (
-                <button
-                  key={employee.id}
-                  type="button"
-                  className={`employee-choice selectable ${selectedIds.includes(employee.id) ? 'selected' : ''}`}
-                  onClick={() => handleToggle(employee.id)}
-                >
-                  <div>
-                    <strong>{employee.name}</strong>
-                    <span>{employee.role}</span>
-                  </div>
-                  <span className={`tag ${getEmployeeTagTone(employee.role)}`}>{employee.skills?.[0] ?? employee.role}</span>
-                </button>
+                (() => {
+                  const rolePresentation = getRolePresentation(employee.role, employee.skills);
+                  const visibleSkills = stripRoleMetadataSkills(employee.skills).slice(0, 2);
+                  const isSelected = selectedIds.includes(employee.id);
+
+                  return (
+                    <button
+                      key={employee.id}
+                      type="button"
+                      className={`employee-choice selectable rich-choice ${isSelected ? 'selected' : ''}`}
+                      onClick={() => handleToggle(employee.id)}
+                    >
+                      <span className="avatar-mini employee-choice-avatar">{employee.avatar ?? '👤'}</span>
+                      <div className="employee-choice-copy">
+                        <div className="employee-choice-headline">
+                          <strong>{employee.name}</strong>
+                          <span className={`employee-choice-role ${getEmployeeTagTone(employee.role)}`}>{rolePresentation.label}</span>
+                        </div>
+                        <p>{rolePresentation.hint || employee.role}</p>
+                        <div className="employee-choice-meta-row">
+                          <span className="employee-choice-code">{employee.employeeCode ?? '-'}</span>
+                          {visibleSkills.map((skill) => <span key={`${employee.id}-${skill}`} className="employee-choice-skill">{skill}</span>)}
+                        </div>
+                      </div>
+                      <span className={`employee-choice-indicator ${isSelected ? 'selected' : ''}`}>
+                        {isSelected ? <CheckCircle2 size={18} /> : <span className="circle" />}
+                      </span>
+                    </button>
+                  );
+                })()
               ))}
             </div>
+            {!filteredEmployees.length ? <div className="empty-card compact">{emptyStateMessage}</div> : null}
           </>
         )}
         <div className="modal-actions sticky-actions">
@@ -156,6 +190,46 @@ export function RemoveConfirm({ block, employee, onCancel, onConfirm }) {
         <div className="modal-actions">
           <button type="button" onClick={onCancel}>{summary ? 'กลับสู่ตารางงาน' : 'ยกเลิก'}</button>
           {summary ? null : <button type="button" className="danger-btn" onClick={handleConfirm}>ยืนยันการนำออก</button>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function DeleteTimeWindowConfirm({ dayLabel, roundLabel, timeLabel, employeeNames = [], groupedBlockCount = 0, onCancel, onConfirm }) {
+  const [summary, setSummary] = useState('');
+
+  const handleConfirm = () => {
+    const result = onConfirm?.();
+    if (!result) {
+      return;
+    }
+
+    setSummary(result);
+  };
+
+  return (
+    <section className="flow-page-shell">
+      <div className="confirm-page-card calm-flow-card">
+        {summary ? (
+          <div className="confirm-success">
+            <CheckCircle2 size={28} />
+            <b>ลบช่วงงานแล้ว</b>
+            <p>{summary}</p>
+          </div>
+        ) : (
+          <>
+            <b>ลบช่วงเวลาเข้างาน</b>
+            <p className="flow-subtitle">ยืนยันการลบ <strong>{timeLabel}</strong> ของ <strong>{dayLabel}</strong> ระบบจะลบช่วงงานย่อย {groupedBlockCount} ช่วงในวันนั้นด้วย</p>
+            <div className="calm-note">
+              <strong>พนักงานที่อยู่ในช่วงนี้</strong>
+              <span>{employeeNames.length ? employeeNames.join(', ') : 'ยังไม่มีพนักงานในช่วงเวลานี้'}</span>
+            </div>
+          </>
+        )}
+        <div className="modal-actions">
+          <button type="button" onClick={onCancel}>{summary ? 'กลับสู่เวลาเข้างาน' : 'ยกเลิก'}</button>
+          {summary ? null : <button type="button" className="danger-btn" onClick={handleConfirm}>ยืนยันการลบ</button>}
         </div>
       </div>
     </section>
@@ -226,53 +300,57 @@ export function RequestHelp({ defaultDetail = '', defaultType = 'ขอพนั
 
 export function ScheduleBlockEditor({ block, onClose, onSubmit }) {
   const isEditing = Boolean(block?.id);
-  const initialPreset = findShiftPreset(block?.roundPresetKey);
+  const initialPreset = findScheduleRoundPreset(block?.roundPresetKey);
   const [formState, setFormState] = useState({
-    id: block?.id,
+    id: block?.id ?? null,
     roundPresetKey: initialPreset.key,
+    roundLabel: getBlockRoundLabel(block),
+    startTime: getBlockStartLabel(block),
+    endTime: getBlockEndLabel(block),
+    title: block?.title ?? '',
     required: String(block?.required ?? 1),
-    tasks: block?.tasks?.length ? [...block.tasks] : [...initialPreset.defaultTasks],
+    tasksText: block?.tasks?.join('\n') ?? '',
   });
   const [summary, setSummary] = useState('');
 
-  const selectedPreset = findShiftPreset(formState.roundPresetKey);
-
   const handleShiftChange = (event) => {
-    const preset = findShiftPreset(event.target.value);
+    const preset = findScheduleRoundPreset(event.target.value);
     setFormState((currentState) => ({
       ...currentState,
       roundPresetKey: preset.key,
-      tasks: [...preset.defaultTasks],
+      roundLabel: preset.key === 'custom' ? currentState.roundLabel || preset.roundLabel : preset.roundLabel,
+      startTime: preset.startTime || currentState.startTime,
+      endTime: preset.endTime || currentState.endTime,
     }));
   };
 
   const handleFieldChange = (event) => {
     const { name, value } = event.target;
+    if (name === 'startTime' || name === 'endTime') {
+      setFormState((currentState) => ({
+        ...currentState,
+        [name]: normalizeClockValue(value) || value,
+      }));
+      return;
+    }
+
     setFormState((currentState) => ({
       ...currentState,
       [name]: value,
     }));
   };
 
-  const handleToggleTask = (task) => {
-    setFormState((currentState) => ({
-      ...currentState,
-      tasks: currentState.tasks.includes(task)
-        ? currentState.tasks.filter((currentTask) => currentTask !== task)
-        : [...currentState.tasks, task],
-    }));
-  };
-
   const handleSubmit = () => {
     const submittedBlock = onSubmit({
       id: formState.id,
-      roundPresetKey: selectedPreset.key,
-      roundLabel: selectedPreset.label,
-      startTime: selectedPreset.startTime,
-      endTime: selectedPreset.endTime,
-      title: selectedPreset.defaultTitle,
+      roundPresetKey: formState.roundPresetKey,
+      roundLabel: formState.roundLabel,
+      startTime: formState.startTime,
+      endTime: formState.endTime,
+      time: buildBlockTimeLabel(formState.startTime, formState.endTime),
+      title: formState.title,
       required: Number(formState.required),
-      tasks: formState.tasks,
+      tasks: formState.tasksText.split('\n'),
     });
 
     if (!submittedBlock) {
@@ -282,16 +360,16 @@ export function ScheduleBlockEditor({ block, onClose, onSubmit }) {
     setSummary(`${isEditing ? 'อัปเดต' : 'สร้าง'} ${formatBlockShiftSummary(submittedBlock)} แล้ว`);
   };
 
-  const shiftPreviewLabel = [selectedPreset.label, buildBlockTimeLabel(selectedPreset.startTime, selectedPreset.endTime)].filter(Boolean).join(' ');
-  const submitDisabled = !summary && (Number(formState.required) <= 0 || !formState.tasks.length);
+  const roundPreviewLabel = [formState.roundLabel.trim(), buildBlockTimeLabel(formState.startTime, formState.endTime)].filter(Boolean).join(' ');
+  const submitDisabled = !summary && (!formState.roundLabel.trim() || !normalizeClockValue(formState.startTime) || !normalizeClockValue(formState.endTime) || !formState.title.trim() || Number(formState.required) <= 0);
 
   return (
     <section className="flow-page-shell">
       <div className="flow-page-card form-page-card calm-flow-card">
         <div className="sheet-head flow-head">
           <div>
-            <b>{isEditing ? 'แก้ไขกะงาน' : 'เพิ่มกะงานใหม่'}</b>
-            <p className="flow-subtitle">เลือกเฉพาะกะหลักของร้าน แล้วกำหนดจำนวนคนกับหน้าที่ในกะเท่านั้น</p>
+            <b>{isEditing ? 'แก้ไขช่วงงาน' : 'เพิ่มช่วงงานใหม่'}</b>
+            <p className="flow-subtitle">กำหนดกะหลัก เวลาเข้า เวลาเลิก และหน้าที่ของช่วงนี้ได้เองในฟอร์มเดียว</p>
           </div>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={16} />
@@ -301,54 +379,59 @@ export function ScheduleBlockEditor({ block, onClose, onSubmit }) {
           <div className="form-success">
             <CheckCircle2 size={20} />
             <div>
-              <strong>{isEditing ? 'อัปเดตกะงานแล้ว' : 'สร้างกะงานแล้ว'}</strong>
+              <strong>{isEditing ? 'อัปเดตช่วงงานแล้ว' : 'สร้างช่วงงานแล้ว'}</strong>
               <p>{summary}</p>
             </div>
           </div>
         ) : (
           <>
             <div className="compact-editor-note schedule-round-preview-note">
-              <strong>{shiftPreviewLabel}</strong>
-              <span>ระบบจะใช้เวลากะมาตรฐานของร้านให้อัตโนมัติ</span>
+              <strong>{roundPreviewLabel || 'เลือกช่วงงานก่อนบันทึก'}</strong>
+              <span>เลือกกะหลักสำเร็จรูป หรือกำหนดชื่อช่วงงานและเวลาเองได้</span>
             </div>
             <div className="form-grid compact-form-grid">
               <label className="field-group form-grid-full">
-                <span>เลือกกะงาน</span>
+                <span>เลือกกะหลัก</span>
                 <select className="select-control" name="roundPresetKey" value={formState.roundPresetKey} onChange={handleShiftChange}>
-                  {scheduleShiftPresets.map((preset) => (
+                  {scheduleRoundPresets.map((preset) => (
                     <option key={preset.key} value={preset.key}>
-                      {preset.label} {preset.startTime} - {preset.endTime}
+                      {preset.label}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="field-group">
+                <span>เวลาเข้า</span>
+                <input className="text-input" type="time" name="startTime" value={formState.startTime} onChange={handleFieldChange} />
+              </label>
+              <label className="field-group">
+                <span>เวลาเลิกงาน</span>
+                <input className="text-input" type="time" name="endTime" value={formState.endTime} onChange={handleFieldChange} />
+              </label>
+              <label className="field-group form-grid-full">
+                <span>ชื่อช่วงงาน</span>
+                <input className="text-input" name="roundLabel" value={formState.roundLabel} onChange={handleFieldChange} placeholder="เช่น กะเช้า" />
+              </label>
+              <label className="field-group">
                 <span>จำนวนพนักงานที่ต้องใช้</span>
                 <input className="text-input" name="required" type="number" min="1" value={formState.required} onChange={handleFieldChange} />
               </label>
-              <div className="field-group form-grid-full">
-                <span>หน้าที่ในกะ</span>
-                <div className="employee-duty-grid">
-                  {allShiftDutyOptions.map((task) => (
-                    <button
-                      key={task}
-                      type="button"
-                      className={`shift-duty-chip ${formState.tasks.includes(task) ? 'selected' : ''}`}
-                      onClick={() => handleToggleTask(task)}
-                    >
-                      {task}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <label className="field-group form-grid-full">
+                <span>ชื่องาน / หน้าที่หลัก</span>
+                <input className="text-input" name="title" value={formState.title} onChange={handleFieldChange} placeholder="เช่น เปิดร้าน" />
+              </label>
+              <label className="field-group form-grid-full">
+                <span>รายการงานเพิ่มเติม</span>
+                <textarea className="textarea-box textarea-control" name="tasksText" value={formState.tasksText} onChange={handleFieldChange} placeholder="หนึ่งบรรทัดต่อหนึ่งงาน เช่น&#10;เปิดเครื่องกาแฟ&#10;เตรียมวัตถุดิบ" />
+              </label>
             </div>
-            {isEditing ? <div className="compact-editor-note">พนักงานในกะนี้จะคงอยู่เหมือนเดิม ระบบจะอัปเดตเฉพาะชนิดกะ จำนวนคน และหน้าที่ในกะ</div> : null}
+            {isEditing ? <div className="compact-editor-note">พนักงานในช่วงนี้จะคงอยู่เหมือนเดิม ระบบจะอัปเดตเฉพาะชื่อช่วง เวลา และหน้าที่ของช่วงงานนี้</div> : null}
           </>
         )}
         <div className="flow-footer schedule-round-editor-actions">
           <button type="button" className="ghost-button" onClick={onClose}>ยกเลิก</button>
           <button type="button" className="primary-inline flow-submit" onClick={summary ? onClose : handleSubmit} disabled={submitDisabled}>
-            {summary ? 'กลับไปตารางงาน' : isEditing ? 'บันทึกกะงาน' : 'สร้างกะงาน'}
+            {summary ? 'กลับไปตารางงาน' : isEditing ? 'บันทึกช่วงงาน' : 'สร้างช่วงงาน'}
           </button>
         </div>
       </div>
