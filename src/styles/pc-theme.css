@@ -2157,9 +2157,8 @@ a, button {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) 360px;
   gap: var(--space-lg);
-  align-items: stretch;
+  align-items: start;
   min-height: 0;
-  height: 100%;
 }
 
 .list-summary {
@@ -3581,12 +3580,11 @@ a, button {
 }
 
 .report-screen-shell {
-  height: 100%;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
-  overflow: hidden;
+  align-content: start;
 }
 
 .report-page-actions {
@@ -3611,6 +3609,7 @@ a, button {
   min-height: 0;
   min-width: 0;
   gap: 12px;
+  align-self: start;
 }
 
 .report-section-head,
@@ -3735,7 +3734,7 @@ a, button {
 }
 
 .report-card-list {
-  flex: 1;
+  flex: 0 1 auto;
   width: 100%;
   min-height: 0;
   min-width: 0;
@@ -3776,6 +3775,7 @@ a, button {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  align-self: start;
 }
 
 .report-catalog-jump-button {
@@ -3801,6 +3801,7 @@ a, button {
 .report-catalog-group-list {
   display: grid;
   gap: 10px;
+  align-content: start;
 }
 
 .report-catalog-panel--fixed .report-catalog-list {
