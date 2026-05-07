@@ -1097,10 +1097,22 @@ function readInitialState() {
 
 function hydrateSupabaseState(remoteState, previousState) {
   const fallbackState = buildDefaultState();
-  const normalizedEmployees = normalizeEmployees(remoteState?.employees ?? fallbackState.employees);
+  const remoteSnapshotLooksIncomplete = Boolean(previousState)
+    && Array.isArray(remoteState?.employees) && remoteState.employees.length === 0
+    && Array.isArray(remoteState?.timeBlocks) && remoteState.timeBlocks.length === 0
+    && Array.isArray(remoteState?.inventoryItems) && remoteState.inventoryItems.length === 0
+    && Array.isArray(remoteState?.requests) && remoteState.requests.length === 0
+    && Array.isArray(remoteState?.issueReports) && remoteState.issueReports.length === 0;
+  const sourceEmployees = remoteSnapshotLooksIncomplete
+    ? previousState?.employees ?? fallbackState.employees
+    : remoteState?.employees ?? fallbackState.employees;
+  const normalizedEmployees = normalizeEmployees(sourceEmployees);
   const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
   const employeesById = buildEmployeesById(normalizedEmployees);
-  const normalizedCalendar = normalizeAvailabilityCalendar(remoteState?.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
+  const sourceAvailabilityCalendar = remoteSnapshotLooksIncomplete
+    ? previousState?.employeeAvailabilityCalendar
+    : remoteState?.employeeAvailabilityCalendar;
+  const normalizedCalendar = normalizeAvailabilityCalendar(sourceAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
   const mergeHydratedTimeBlocks = (remoteBlocks = [], localBlocks = []) => {
     const localBlocksById = new Map((localBlocks ?? []).map((block) => [String(block.id), block]));
     const mergedRemoteBlocks = remoteBlocks.map((block) => {
@@ -1161,6 +1173,21 @@ function hydrateSupabaseState(remoteState, previousState) {
   const persistedSessionId = Number.isFinite(previousState?.employeePortalSessionId) && allowedEmployeeIds.has(previousState.employeePortalSessionId)
     ? previousState.employeePortalSessionId
     : null;
+  const sourceCalendarDaySettings = remoteSnapshotLooksIncomplete
+    ? previousState?.calendarDaySettings
+    : remoteState?.calendarDaySettings;
+  const sourceRequests = remoteSnapshotLooksIncomplete
+    ? previousState?.requests
+    : remoteState?.requests;
+  const sourceInventoryItems = remoteSnapshotLooksIncomplete
+    ? previousState?.inventoryItems
+    : remoteState?.inventoryItems;
+  const sourceInventoryHistory = remoteSnapshotLooksIncomplete
+    ? previousState?.inventoryHistory
+    : remoteState?.inventoryHistory;
+  const sourceIssueReports = remoteSnapshotLooksIncomplete
+    ? previousState?.issueReports
+    : remoteState?.issueReports;
 
   return {
     ...fallbackState,
@@ -1168,14 +1195,14 @@ function hydrateSupabaseState(remoteState, previousState) {
     employees: normalizedEmployees,
     managerSessionActive: Boolean(previousState?.managerSessionActive),
     employeePortalSessionId: persistedSessionId,
-    calendarDaySettings: normalizeCalendarDaySettings(remoteState?.calendarDaySettings ?? fallbackState.calendarDaySettings),
+    calendarDaySettings: normalizeCalendarDaySettings(sourceCalendarDaySettings ?? fallbackState.calendarDaySettings),
     employeeAvailabilityCalendar: normalizedCalendar,
     employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(nextAttendanceWindows, allowedEmployeeIds, employeesById, normalizedCalendar),
     timeBlocks: nextTimeBlocks,
-    requests: Array.isArray(remoteState?.requests) ? remoteState.requests.map((request) => ({ ...request })) : fallbackState.requests,
-    inventoryItems: Array.isArray(remoteState?.inventoryItems) ? remoteState.inventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
-    inventoryHistory: Array.isArray(remoteState?.inventoryHistory) ? remoteState.inventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
-    issueReports: Array.isArray(remoteState?.issueReports) ? remoteState.issueReports.map((issue) => ({ ...issue })) : fallbackState.issueReports,
+    requests: Array.isArray(sourceRequests) ? sourceRequests.map((request) => ({ ...request })) : fallbackState.requests,
+    inventoryItems: Array.isArray(sourceInventoryItems) ? sourceInventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
+    inventoryHistory: Array.isArray(sourceInventoryHistory) ? sourceInventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
+    issueReports: Array.isArray(sourceIssueReports) ? sourceIssueReports.map((issue) => ({ ...issue })) : fallbackState.issueReports,
     settings: normalizeSettings(remoteState?.settings ?? fallbackState.settings),
   };
 }
