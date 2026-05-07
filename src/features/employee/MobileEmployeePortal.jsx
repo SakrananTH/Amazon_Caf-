@@ -373,7 +373,6 @@ function EmployeeMobileTeamBlockDetail({ block, assignedEmployees = [], dateKey 
               employee={employee}
               dateKey={dateKey}
               availabilityCalendar={availabilityCalendar}
-              showRole
               className="employee-mobile-team-chip"
             />
           ))

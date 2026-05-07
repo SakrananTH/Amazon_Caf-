@@ -5911,18 +5911,34 @@ a, button {
 }
 
 .employee-mobile-team-chip-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 4px;
 }
 
 .employee-mobile-team-chip {
-  width: auto;
-  max-width: 100%;
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  padding: 8px 6px;
+}
+
+.employee-mobile-team-chip .avatar-mini,
+.employee-mobile-team-chip .chip-status-badge {
+  display: none;
+}
+
+.employee-mobile-team-chip .chip-name {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
 }
 
 .employee-mobile-team-chip-list.empty span {
+  grid-column: 1 / -1;
   display: block;
   padding: 8px 10px;
   border-radius: 12px;
