@@ -5933,8 +5933,8 @@ a, button {
   min-width: 0;
   justify-content: center;
   padding: 8px 6px;
-  border-color: transparent;
-  background: transparent;
+  border-color: #ffffff;
+  background: #ffffff;
   color: var(--text-main);
   box-shadow: none;
 }
