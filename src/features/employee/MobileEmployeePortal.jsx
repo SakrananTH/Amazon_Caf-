@@ -548,6 +548,8 @@ function EmployeePortalLoginCard({ onLogin, onSuccess }) {
 
 function EmployeePortalGate({ children, currentEmployee, onLogout, title }) {
   const navigate = useNavigate();
+  const { employeePortalSessionId, isSupabaseSyncReady } = useAppState();
+  const isRestoringEmployeeSession = !isSupabaseSyncReady && Number.isFinite(employeePortalSessionId);
 
   useEffect(() => {
     if (!currentEmployee) {
@@ -587,6 +589,22 @@ function EmployeePortalGate({ children, currentEmployee, onLogout, title }) {
     };
   }, [currentEmployee, navigate, onLogout]);
 
+  if (isRestoringEmployeeSession) {
+    return (
+      <EmployeeMobileWorkspace title={title} profileAvatar="⏳" profileName="กำลังกู้คืนเซสชัน" profileSubtitle="กำลังโหลดข้อมูลพนักงานล่าสุด">
+        <section className="employee-mobile-section-card">
+          <div className="employee-mobile-section-head">
+            <div>
+              <h3>กำลังเปิดหน้าพนักงาน</h3>
+              <p>กำลังกู้คืนข้อมูลการเข้าสู่ระบบและตารางงานล่าสุด</p>
+            </div>
+            <CalendarDays size={18} />
+          </div>
+        </section>
+      </EmployeeMobileWorkspace>
+    );
+  }
+
   if (!currentEmployee) {
     return <Navigate to={routePaths.employeeLogin} replace />;
   }
@@ -611,9 +629,23 @@ function EmployeePortalGate({ children, currentEmployee, onLogout, title }) {
 export function EmployeeMobileLoginPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { employeePortalLogin, employeePortalSessionId, employees } = useAppState();
+  const { employeePortalLogin, employeePortalSessionId, employees, isSupabaseSyncReady } = useAppState();
   const currentEmployee = findPortalEmployee(employees, employeePortalSessionId);
   const portalMessage = location.state?.portalMessage ?? '';
+
+  if (!isSupabaseSyncReady && Number.isFinite(employeePortalSessionId)) {
+    return (
+      <EmployeeMobileWorkspace title="เข้าสู่ระบบพนักงาน" profileAvatar="⏳" profileName="กำลังกู้คืนเซสชัน" profileSubtitle="กำลังตรวจสอบข้อมูลพนักงานล่าสุด">
+        <section className="employee-mobile-section-card employee-mobile-login-hero-card">
+          <div className="employee-mobile-login-hero-copy">
+            <span className="employee-mobile-login-kicker">Shift Ready</span>
+            <strong>กำลังกู้คืนการเข้าสู่ระบบของคุณ</strong>
+            <p>รอสักครู่ ระบบกำลังตรวจสอบข้อมูลพนักงานและตารางงานล่าสุดก่อนเปิดหน้าใช้งาน</p>
+          </div>
+        </section>
+      </EmployeeMobileWorkspace>
+    );
+  }
 
   if (currentEmployee) {
     return <Navigate to={routePaths.employeeHome} replace />;

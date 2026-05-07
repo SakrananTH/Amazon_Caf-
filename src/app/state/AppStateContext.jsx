@@ -2285,6 +2285,7 @@ export function AppStateProvider({ children }) {
     employeeAttendanceWindows,
     employeePortalSessionId,
     employees,
+    isSupabaseSyncReady,
     inventoryHistory,
     inventoryItems,
     issueReports,
