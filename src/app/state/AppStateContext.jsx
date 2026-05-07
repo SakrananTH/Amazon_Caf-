@@ -1101,13 +1101,63 @@ function hydrateSupabaseState(remoteState, previousState) {
   const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
   const employeesById = buildEmployeesById(normalizedEmployees);
   const normalizedCalendar = normalizeAvailabilityCalendar(remoteState?.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
-  const nextTimeBlocks = Array.isArray(remoteState?.timeBlocks)
+  const mergeHydratedTimeBlocks = (remoteBlocks = [], localBlocks = []) => {
+    const localBlocksById = new Map((localBlocks ?? []).map((block) => [String(block.id), block]));
+    const mergedRemoteBlocks = remoteBlocks.map((block) => {
+      const localBlock = localBlocksById.get(String(block.id));
+      if (!localBlock) {
+        return block;
+      }
+
+      return {
+        ...localBlock,
+        ...block,
+        templateId: block.templateId ?? localBlock.templateId,
+        startTime: block.startTime || localBlock.startTime,
+        endTime: block.endTime || localBlock.endTime,
+        roundPresetKey: block.roundPresetKey || localBlock.roundPresetKey,
+        roundLabel: block.roundLabel || localBlock.roundLabel,
+      };
+    });
+
+    const remoteBlockIds = new Set(mergedRemoteBlocks.map((block) => String(block.id)));
+    const missingLocalBlocks = (localBlocks ?? []).filter((block) => !remoteBlockIds.has(String(block.id)));
+    return [...mergedRemoteBlocks, ...missingLocalBlocks];
+  };
+  const mergeHydratedAttendanceWindows = (remoteWindows = {}, localWindows = {}) => {
+    const mergedWindows = Object.fromEntries(Object.entries(remoteWindows ?? {}).map(([dateKey, dateWindows]) => [
+      dateKey,
+      Object.fromEntries(Object.entries(dateWindows ?? {}).map(([windowKey, windowValue]) => [windowKey, { ...windowValue }]))
+    ]));
+
+    Object.entries(localWindows ?? {}).forEach(([dateKey, dateWindows]) => {
+      if (!mergedWindows[dateKey]) {
+        mergedWindows[dateKey] = Object.fromEntries(Object.entries(dateWindows ?? {}).map(([windowKey, windowValue]) => [windowKey, { ...windowValue }]));
+        return;
+      }
+
+      Object.entries(dateWindows ?? {}).forEach(([windowKey, windowValue]) => {
+        if (!mergedWindows[dateKey][windowKey]) {
+          mergedWindows[dateKey][windowKey] = { ...windowValue };
+        }
+      });
+    });
+
+    return mergedWindows;
+  };
+  const remoteTimeBlocks = Array.isArray(remoteState?.timeBlocks)
     ? sanitizeTimeBlocks(remoteState.timeBlocks, allowedEmployeeIds, employeesById)
     : fallbackState.timeBlocks;
+  const nextTimeBlocks = sanitizeTimeBlocks(
+    mergeHydratedTimeBlocks(remoteTimeBlocks, previousState?.timeBlocks ?? []),
+    allowedEmployeeIds,
+    employeesById,
+  );
   const hasRemoteAttendanceWindows = Boolean(remoteState) && Object.prototype.hasOwnProperty.call(remoteState, 'employeeAttendanceWindows');
   const baseAttendanceWindows = hasRemoteAttendanceWindows
     ? remoteState?.employeeAttendanceWindows
     : previousState?.employeeAttendanceWindows;
+  const nextAttendanceWindows = mergeHydratedAttendanceWindows(baseAttendanceWindows ?? buildAttendanceWindowsFromBlocks(remoteTimeBlocks, allowedEmployeeIds), previousState?.employeeAttendanceWindows);
   const persistedSessionId = Number.isFinite(previousState?.employeePortalSessionId) && allowedEmployeeIds.has(previousState.employeePortalSessionId)
     ? previousState.employeePortalSessionId
     : null;
@@ -1120,7 +1170,7 @@ function hydrateSupabaseState(remoteState, previousState) {
     employeePortalSessionId: persistedSessionId,
     calendarDaySettings: normalizeCalendarDaySettings(remoteState?.calendarDaySettings ?? fallbackState.calendarDaySettings),
     employeeAvailabilityCalendar: normalizedCalendar,
-    employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(baseAttendanceWindows ?? buildAttendanceWindowsFromBlocks(nextTimeBlocks, allowedEmployeeIds), allowedEmployeeIds, employeesById, normalizedCalendar),
+    employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(nextAttendanceWindows, allowedEmployeeIds, employeesById, normalizedCalendar),
     timeBlocks: nextTimeBlocks,
     requests: Array.isArray(remoteState?.requests) ? remoteState.requests.map((request) => ({ ...request })) : fallbackState.requests,
     inventoryItems: Array.isArray(remoteState?.inventoryItems) ? remoteState.inventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
@@ -1181,8 +1231,15 @@ export function AppStateProvider({ children }) {
         }
 
         setState((currentState) => {
+          const remoteOnlyState = hydrateSupabaseState({
+            ...remoteState,
+            employeeAttendanceWindows: Object.prototype.hasOwnProperty.call(remoteState ?? {}, 'employeeAttendanceWindows')
+              ? remoteState.employeeAttendanceWindows
+              : undefined,
+            timeBlocks: Array.isArray(remoteState?.timeBlocks) ? remoteState.timeBlocks : undefined,
+          }, null);
           const hydratedState = hydrateSupabaseState(remoteState, currentState);
-          lastSyncedSignatureRef.current = buildPersistedStateSignature(hydratedState);
+          lastSyncedSignatureRef.current = buildPersistedStateSignature(remoteOnlyState);
           return hydratedState;
         });
         setIsSupabaseSyncReady(true);
@@ -2122,6 +2179,7 @@ export function AppStateProvider({ children }) {
         employees: currentState.employees.some((employee) => employee.id === matchedEmployee.id)
           ? currentState.employees.map((employee) => (employee.id === matchedEmployee.id ? { ...employee, ...matchedEmployee } : employee))
           : normalizeEmployees([...currentState.employees, matchedEmployee]),
+        managerSessionActive: false,
         employeePortalSessionId: matchedEmployee.id,
       }));
 
@@ -2138,6 +2196,7 @@ export function AppStateProvider({ children }) {
 
     setState((currentState) => ({
       ...currentState,
+      managerSessionActive: false,
       employeePortalSessionId: matchedEmployee.id,
     }));
 
@@ -2161,6 +2220,7 @@ export function AppStateProvider({ children }) {
 
       setState((currentState) => ({
         ...currentState,
+        employeePortalSessionId: null,
         managerSessionActive: true,
       }));
 
@@ -2178,6 +2238,7 @@ export function AppStateProvider({ children }) {
 
     setState((currentState) => ({
       ...currentState,
+      employeePortalSessionId: null,
       managerSessionActive: true,
     }));
 

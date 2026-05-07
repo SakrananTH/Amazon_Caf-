@@ -5881,6 +5881,19 @@ a, button {
   margin: 0;
 }
 
+.employee-mobile-team-block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.employee-mobile-team-block-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .employee-mobile-block-detail strong {
   font-size: 13px;
   color: var(--text-main);
@@ -5895,6 +5908,28 @@ a, button {
   font-size: 12px;
   color: var(--text-main);
   line-height: 1.5;
+}
+
+.employee-mobile-team-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.employee-mobile-team-chip {
+  width: auto;
+  max-width: 100%;
+}
+
+.employee-mobile-team-chip-list.empty span {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .employee-mobile-week-list.empty span,
