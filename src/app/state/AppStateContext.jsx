@@ -1279,6 +1279,8 @@ export function AppStateProvider({ children }) {
   const [state, setState] = useState(readInitialState);
   const [isSupabaseSyncReady, setIsSupabaseSyncReady] = useState(!useSupabaseBackend || !isSupabaseConfigured);
   const lastSyncedSignatureRef = useRef(null);
+  const queuedSyncSignatureRef = useRef(null);
+  const syncQueueRef = useRef(Promise.resolve());
   const syncTimeoutRef = useRef(null);
   const { calendarDaySettings, employeeAvailabilityCalendar, employeeAttendanceWindows, employeePortalSessionId, employees, inventoryHistory, inventoryItems, issueReports, managerSessionActive, requests, settings, timeBlocks } = state;
 
@@ -1354,7 +1356,7 @@ export function AppStateProvider({ children }) {
     }
 
     const nextSignature = buildPersistedStateSignature(state);
-    if (nextSignature === lastSyncedSignatureRef.current) {
+    if (nextSignature === lastSyncedSignatureRef.current || nextSignature === queuedSyncSignatureRef.current) {
       return undefined;
     }
 
@@ -1363,12 +1365,21 @@ export function AppStateProvider({ children }) {
     }
 
     syncTimeoutRef.current = window.setTimeout(() => {
-      saveAppStateToSupabase(buildSupabasePersistedState(state))
+      const persistedState = buildSupabasePersistedState(state);
+      queuedSyncSignatureRef.current = nextSignature;
+      syncQueueRef.current = syncQueueRef.current
+        .catch(() => undefined)
+        .then(() => saveAppStateToSupabase(persistedState))
         .then(() => {
           lastSyncedSignatureRef.current = nextSignature;
         })
         .catch((error) => {
           console.error('Failed to sync app state to Supabase.', error);
+        })
+        .finally(() => {
+          if (queuedSyncSignatureRef.current === nextSignature) {
+            queuedSyncSignatureRef.current = null;
+          }
         });
     }, 500);
 

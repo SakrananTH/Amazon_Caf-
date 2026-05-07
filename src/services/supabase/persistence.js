@@ -193,21 +193,106 @@ function serializeIssueReports(issues = []) {
   })).filter((row) => Number.isFinite(row.id) && row.title && row.detail);
 }
 
-function clearTableRows(client, table, clearFilter) {
-  const clearQuery = client.from(table).delete();
-  const deletePromise = clearFilter.type === 'gte'
-    ? clearQuery.gte(clearFilter.column, clearFilter.value)
-    : clearQuery.not(clearFilter.column, 'is', null);
-
-  return runQuery(deletePromise, `delete ${table}`);
-}
-
-function insertTableRows(client, table, rows) {
+function upsertTableRows(client, table, rows, onConflict) {
   if (!rows.length) {
     return Promise.resolve(null);
   }
 
-  return runQuery(client.from(table).insert(rows), `insert ${table}`);
+  return runQuery(client.from(table).upsert(rows, { onConflict }), `upsert ${table}`);
+}
+
+function selectTableRows(client, table, columns) {
+  return runQuery(client.from(table).select(columns.join(', ')), `select ${table}`);
+}
+
+function normalizeDateKey(value) {
+  const normalizedValue = formatDateKeyValue(value);
+  return normalizedValue ? String(normalizedValue) : null;
+}
+
+async function deleteRowsByColumnValues(client, table, column, values) {
+  if (!values.length) {
+    return null;
+  }
+
+  return runQuery(client.from(table).delete().in(column, values), `delete stale ${table}`);
+}
+
+async function deleteStaleIdRows(client, table, desiredIds = []) {
+  const existingRows = await selectTableRows(client, table, ['id']);
+  const desiredIdSet = new Set(desiredIds.map((value) => Number(value)).filter(Number.isFinite));
+  const staleIds = existingRows
+    .map((row) => Number(row.id))
+    .filter(Number.isFinite)
+    .filter((id) => !desiredIdSet.has(id));
+
+  return deleteRowsByColumnValues(client, table, 'id', staleIds);
+}
+
+async function deleteStaleDateKeyRows(client, table, desiredDateKeys = []) {
+  const existingRows = await selectTableRows(client, table, ['date_key']);
+  const desiredDateKeySet = new Set(desiredDateKeys.map((value) => normalizeDateKey(value)).filter(Boolean));
+  const staleDateKeys = existingRows
+    .map((row) => normalizeDateKey(row.date_key))
+    .filter(Boolean)
+    .filter((dateKey) => !desiredDateKeySet.has(dateKey));
+
+  return deleteRowsByColumnValues(client, table, 'date_key', staleDateKeys);
+}
+
+function groupCompositeValues(rows = [], ownerColumn, valueColumn, normalizeValue = (value) => value) {
+  return rows.reduce((groups, row) => {
+    const ownerValue = Number(row[ownerColumn]);
+    const normalizedValue = normalizeValue(row[valueColumn]);
+
+    if (!Number.isFinite(ownerValue) || normalizedValue == null || normalizedValue === '') {
+      return groups;
+    }
+
+    if (!groups.has(ownerValue)) {
+      groups.set(ownerValue, new Set());
+    }
+
+    groups.get(ownerValue).add(normalizedValue);
+    return groups;
+  }, new Map());
+}
+
+async function deleteStaleCompositeRows(client, table, {
+  ownerColumn,
+  valueColumn,
+  desiredRows = [],
+  ownerIds = [],
+  normalizeValue = (value) => value,
+}) {
+  const normalizedOwnerIds = [...new Set(ownerIds.map((value) => Number(value)).filter(Number.isFinite))];
+  if (!normalizedOwnerIds.length) {
+    return null;
+  }
+
+  const existingRows = await selectTableRows(client, table, [ownerColumn, valueColumn]);
+  const existingByOwner = groupCompositeValues(existingRows, ownerColumn, valueColumn, normalizeValue);
+  const desiredByOwner = groupCompositeValues(desiredRows, ownerColumn, valueColumn, normalizeValue);
+
+  const deletions = normalizedOwnerIds.map((ownerId) => {
+    const existingValues = existingByOwner.get(ownerId);
+    if (!existingValues?.size) {
+      return null;
+    }
+
+    const desiredValues = desiredByOwner.get(ownerId) ?? new Set();
+    const staleValues = [...existingValues].filter((value) => !desiredValues.has(value));
+    if (!staleValues.length) {
+      return null;
+    }
+
+    return runQuery(
+      client.from(table).delete().eq(ownerColumn, ownerId).in(valueColumn, staleValues),
+      `delete stale ${table}`,
+    );
+  }).filter(Boolean);
+
+  await Promise.all(deletions);
 }
 
 export function createPersistedStatePayload(state) {
@@ -231,28 +316,40 @@ export async function saveAppStateToSupabase(state) {
   const client = requireSupabase();
   const payload = createPersistedStatePayload(state);
 
-  await clearTableRows(client, 'employee_availability', { type: 'gte', column: 'employee_id', value: 0 });
-  await clearTableRows(client, 'schedule_block_assignments', { type: 'gte', column: 'block_id', value: 0 });
-  await clearTableRows(client, 'inventory_history', { type: 'gte', column: 'id', value: 0 });
-  await clearTableRows(client, 'schedule_blocks', { type: 'gte', column: 'id', value: 0 });
-  await clearTableRows(client, 'requests', { type: 'gte', column: 'id', value: 0 });
-  await clearTableRows(client, 'issue_reports', { type: 'gte', column: 'id', value: 0 });
-  await clearTableRows(client, 'inventory_items', { type: 'gte', column: 'id', value: 0 });
-  await clearTableRows(client, 'employees', { type: 'gte', column: 'id', value: 0 });
-  await clearTableRows(client, 'calendar_day_settings', { type: 'gte', column: 'date_key', value: '0001-01-01' });
-
   await runQuery(
     client.from('app_settings').upsert(payload.appSettings, { onConflict: 'id' }),
     'upsert app_settings',
   );
 
-  await insertTableRows(client, 'employees', payload.employees);
-  await insertTableRows(client, 'calendar_day_settings', payload.calendarDaySettings);
-  await insertTableRows(client, 'employee_availability', payload.employeeAvailability);
-  await insertTableRows(client, 'schedule_blocks', payload.scheduleBlocks);
-  await insertTableRows(client, 'schedule_block_assignments', payload.scheduleAssignments);
-  await insertTableRows(client, 'requests', payload.requests);
-  await insertTableRows(client, 'inventory_items', payload.inventoryItems);
-  await insertTableRows(client, 'inventory_history', payload.inventoryHistory);
-  await insertTableRows(client, 'issue_reports', payload.issueReports);
+  await upsertTableRows(client, 'employees', payload.employees, 'id');
+  await upsertTableRows(client, 'calendar_day_settings', payload.calendarDaySettings, 'date_key');
+  await upsertTableRows(client, 'employee_availability', payload.employeeAvailability, 'employee_id,date_key');
+  await upsertTableRows(client, 'schedule_blocks', payload.scheduleBlocks, 'id');
+  await upsertTableRows(client, 'schedule_block_assignments', payload.scheduleAssignments, 'block_id,employee_id');
+  await upsertTableRows(client, 'requests', payload.requests, 'id');
+  await upsertTableRows(client, 'inventory_items', payload.inventoryItems, 'id');
+  await upsertTableRows(client, 'inventory_history', payload.inventoryHistory, 'id');
+  await upsertTableRows(client, 'issue_reports', payload.issueReports, 'id');
+
+  await deleteStaleIdRows(client, 'issue_reports', payload.issueReports.map((row) => row.id));
+  await deleteStaleIdRows(client, 'requests', payload.requests.map((row) => row.id));
+  await deleteStaleIdRows(client, 'inventory_history', payload.inventoryHistory.map((row) => row.id));
+  await deleteStaleCompositeRows(client, 'schedule_block_assignments', {
+    ownerColumn: 'block_id',
+    valueColumn: 'employee_id',
+    desiredRows: payload.scheduleAssignments,
+    ownerIds: payload.scheduleBlocks.map((row) => row.id),
+    normalizeValue: (value) => Number(value),
+  });
+  await deleteStaleCompositeRows(client, 'employee_availability', {
+    ownerColumn: 'employee_id',
+    valueColumn: 'date_key',
+    desiredRows: payload.employeeAvailability,
+    ownerIds: payload.employees.map((row) => row.id),
+    normalizeValue: normalizeDateKey,
+  });
+  await deleteStaleDateKeyRows(client, 'calendar_day_settings', payload.calendarDaySettings.map((row) => row.date_key));
+  await deleteStaleIdRows(client, 'schedule_blocks', payload.scheduleBlocks.map((row) => row.id));
+  await deleteStaleIdRows(client, 'inventory_items', payload.inventoryItems.map((row) => row.id));
+  await deleteStaleIdRows(client, 'employees', payload.employees.map((row) => row.id));
 }
