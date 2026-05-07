@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Copy, PencilLine, Plus, TriangleAlert } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Copy, PencilLine, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DesktopWorkspace from './DesktopWorkspace.jsx';
+import { DeleteTimeWindowConfirm } from './ModalScreens.jsx';
 import EmployeeChip from '../shared/EmployeeChip.jsx';
 import { routePaths } from '../../app/routes.js';
 import { computeBlockStatus, formatDateKey, getEmployeeAvailabilityMeta, getTimeBlocksForDate, isEmployeeEligibleForScheduleBlock, isEmployeeScheduleEligible } from '../../app/state/AppStateContext.jsx';
@@ -17,12 +18,13 @@ function getRoundStatusLabel(required, assigned) {
   return `ขาด ${shortage} คน`;
 }
 
-export default function DesktopSchedule({ blocks, employees, employeeAttendanceWindows, employeeAvailabilityCalendar, moveEmployeeToBlock, autoAssignEmployeesToBlock, copyDaySchedule }) {
+export default function DesktopSchedule({ blocks, employees, employeeAttendanceWindows, employeeAvailabilityCalendar, moveEmployeeToBlock, autoAssignEmployeesToBlock, copyDaySchedule, deleteTimeBlock }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [dayOffset, setDayOffset] = useState(0);
   const [dragState, setDragState] = useState(null);
   const [copyNotice, setCopyNotice] = useState('');
+  const [pendingDeleteBlock, setPendingDeleteBlock] = useState(null);
 
   useEffect(() => {
     const selectedDateKey = location.state?.selectedDateKey;
@@ -182,6 +184,19 @@ export default function DesktopSchedule({ blocks, employees, employeeAttendanceW
                   <button type="button" className="schedule-inline-link" onClick={() => navigate(routePaths.manageScheduleBlock, { state: { blockId: block.id, returnTo: routePaths.desktopSchedule, selectedDateKey: boardDateKey } })}>
                     <PencilLine size={14} /> แก้ไขกะงาน
                   </button>
+                  <button
+                    type="button"
+                    className="schedule-inline-link"
+                    onClick={() => setPendingDeleteBlock({
+                      id: block.id,
+                      dateLabel: formattedBoardDate,
+                      time: block.time,
+                      title: block.title,
+                      employeeNames: assignedEmployees.map((employee) => employee.name),
+                    })}
+                  >
+                    <Trash2 size={14} /> ลบกะงาน
+                  </button>
                 </div>
 
                 <div className="col-body">
@@ -249,6 +264,38 @@ export default function DesktopSchedule({ blocks, employees, employeeAttendanceW
           {!dateBlocks.length ? <div className="empty-card">วันนี้ยังไม่มีกะงานในตาราง สามารถเพิ่มกะงานของวันที่เลือกได้ทันที</div> : null}
         </div>
       </section>
+      {pendingDeleteBlock ? (
+        <div className="weekly-schedule-dialog-backdrop">
+          <DeleteTimeWindowConfirm
+            title="ลบกะงาน"
+            successTitle="ลบกะงานแล้ว"
+            confirmLabel="ยืนยันการลบ"
+            cancelLabel="ยกเลิก"
+            successCancelLabel="กลับหน้าตาราง"
+            dayLabel={pendingDeleteBlock.dateLabel}
+            timeLabel={pendingDeleteBlock.time}
+            employeeNames={pendingDeleteBlock.employeeNames}
+            groupedBlockCount={1}
+            impactLabel="พนักงานในกะนี้"
+            emptyEmployeesLabel="ยังไม่มีพนักงานในกะนี้"
+            description={(
+              <>
+                ยืนยันการลบกะ <strong>{pendingDeleteBlock.title}</strong> เวลา <strong>{pendingDeleteBlock.time}</strong> ของ <strong>{pendingDeleteBlock.dateLabel}</strong> ระบบจะลบกะนี้ออกจากตารางทันที
+              </>
+            )}
+            onCancel={() => setPendingDeleteBlock(null)}
+            onConfirm={() => {
+              const deletedBlock = deleteTimeBlock?.(pendingDeleteBlock.id);
+              if (!deletedBlock) {
+                return '';
+              }
+
+              setCopyNotice(`ลบกะงาน ${deletedBlock.title} (${deletedBlock.time}) แล้ว`);
+              return `ลบกะงาน ${deletedBlock.title} เวลา ${deletedBlock.time} แล้ว`;
+            }}
+          />
+        </div>
+      ) : null}
     </DesktopWorkspace>
   );
 }

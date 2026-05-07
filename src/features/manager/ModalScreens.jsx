@@ -196,7 +196,23 @@ export function RemoveConfirm({ block, employee, onCancel, onConfirm }) {
   );
 }
 
-export function DeleteTimeWindowConfirm({ dayLabel, roundLabel, timeLabel, employeeNames = [], groupedBlockCount = 0, onCancel, onConfirm }) {
+export function DeleteTimeWindowConfirm({
+  dayLabel,
+  roundLabel,
+  timeLabel,
+  employeeNames = [],
+  groupedBlockCount = 0,
+  title = 'ลบช่วงเวลาเข้างาน',
+  successTitle = 'ลบช่วงงานแล้ว',
+  description = null,
+  impactLabel = 'พนักงานที่อยู่ในช่วงนี้',
+  emptyEmployeesLabel = 'ยังไม่มีพนักงานในช่วงเวลานี้',
+  confirmLabel = 'ยืนยันการลบ',
+  cancelLabel = 'ยกเลิก',
+  successCancelLabel = 'กลับสู่เวลาเข้างาน',
+  onCancel,
+  onConfirm,
+}) {
   const [summary, setSummary] = useState('');
 
   const handleConfirm = () => {
@@ -214,22 +230,22 @@ export function DeleteTimeWindowConfirm({ dayLabel, roundLabel, timeLabel, emplo
         {summary ? (
           <div className="confirm-success">
             <CheckCircle2 size={28} />
-            <b>ลบช่วงงานแล้ว</b>
+            <b>{successTitle}</b>
             <p>{summary}</p>
           </div>
         ) : (
           <>
-            <b>ลบช่วงเวลาเข้างาน</b>
-            <p className="flow-subtitle">ยืนยันการลบ <strong>{timeLabel}</strong> ของ <strong>{dayLabel}</strong> ระบบจะลบช่วงงานย่อย {groupedBlockCount} ช่วงในวันนั้นด้วย</p>
+            <b>{title}</b>
+            <p className="flow-subtitle">{description ?? <>ยืนยันการลบ <strong>{timeLabel}</strong> ของ <strong>{dayLabel}</strong> ระบบจะลบช่วงงานย่อย {groupedBlockCount} ช่วงในวันนั้นด้วย</>}</p>
             <div className="calm-note">
-              <strong>พนักงานที่อยู่ในช่วงนี้</strong>
-              <span>{employeeNames.length ? employeeNames.join(', ') : 'ยังไม่มีพนักงานในช่วงเวลานี้'}</span>
+              <strong>{impactLabel}</strong>
+              <span>{employeeNames.length ? employeeNames.join(', ') : emptyEmployeesLabel}</span>
             </div>
           </>
         )}
         <div className="modal-actions">
-          <button type="button" onClick={onCancel}>{summary ? 'กลับสู่เวลาเข้างาน' : 'ยกเลิก'}</button>
-          {summary ? null : <button type="button" className="danger-btn" onClick={handleConfirm}>ยืนยันการลบ</button>}
+          <button type="button" onClick={onCancel}>{summary ? successCancelLabel : cancelLabel}</button>
+          {summary ? null : <button type="button" className="danger-btn" onClick={handleConfirm}>{confirmLabel}</button>}
         </div>
       </div>
     </section>

@@ -63,11 +63,11 @@ function EmployeeLoginRoutePage() {
 }
 
 function DesktopSchedulePage() {
-  const { autoAssignEmployeesToBlock, copyDaySchedule, employeeAttendanceWindows, employeeAvailabilityCalendar, employees, moveEmployeeToBlock, timeBlocks } = useAppState();
+  const { autoAssignEmployeesToBlock, copyDaySchedule, deleteTimeBlock, employeeAttendanceWindows, employeeAvailabilityCalendar, employees, moveEmployeeToBlock, timeBlocks } = useAppState();
   return (
     <ManagerDesktopGate>
       <div className="screen-stage desktop">
-        <DesktopSchedule blocks={timeBlocks} employees={employees} employeeAttendanceWindows={employeeAttendanceWindows} employeeAvailabilityCalendar={employeeAvailabilityCalendar} moveEmployeeToBlock={moveEmployeeToBlock} autoAssignEmployeesToBlock={autoAssignEmployeesToBlock} copyDaySchedule={copyDaySchedule} />
+        <DesktopSchedule blocks={timeBlocks} employees={employees} employeeAttendanceWindows={employeeAttendanceWindows} employeeAvailabilityCalendar={employeeAvailabilityCalendar} moveEmployeeToBlock={moveEmployeeToBlock} autoAssignEmployeesToBlock={autoAssignEmployeesToBlock} copyDaySchedule={copyDaySchedule} deleteTimeBlock={deleteTimeBlock} />
       </div>
     </ManagerDesktopGate>
   );
