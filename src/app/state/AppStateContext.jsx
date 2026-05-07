@@ -2314,5 +2314,35 @@ export function useAppState() {
 }
 
 export function getTimeBlocksForDate(timeBlocks = [], dateKey = formatDateKey()) {
-  return timeBlocks.filter((block) => String(block.dateKey ?? formatDateKey()) === String(dateKey));
+  const toSortableMinutes = (timeLabel = '') => {
+    const normalizedTime = String(timeLabel ?? '').trim();
+    if (!normalizedTime) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const [hoursText = '0', minutesText = '0'] = normalizedTime.split(':');
+    const hours = Number(hoursText);
+    const minutes = Number(minutesText);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return (hours * 60) + minutes;
+  };
+
+  return timeBlocks
+    .filter((block) => String(block.dateKey ?? formatDateKey()) === String(dateKey))
+    .sort((leftBlock, rightBlock) => {
+      const startDiff = toSortableMinutes(getBlockStartLabel(leftBlock)) - toSortableMinutes(getBlockStartLabel(rightBlock));
+      if (startDiff !== 0) {
+        return startDiff;
+      }
+
+      const endDiff = toSortableMinutes(getBlockEndLabel(leftBlock)) - toSortableMinutes(getBlockEndLabel(rightBlock));
+      if (endDiff !== 0) {
+        return endDiff;
+      }
+
+      return String(leftBlock.title ?? '').localeCompare(String(rightBlock.title ?? ''), 'th');
+    });
 }
