@@ -5910,6 +5910,17 @@ a, button {
   line-height: 1.5;
 }
 
+.employee-mobile-team-unavailable-note {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .employee-mobile-team-chip-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

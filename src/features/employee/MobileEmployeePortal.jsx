@@ -306,10 +306,24 @@ function getAssignedBlockSummary(blocks = []) {
   return blocks.slice(0, 3).map((block) => String(block.title ?? getBlockRoundLabel(block)).trim()).filter(Boolean).join(' • ');
 }
 
-function getAssignedEmployeesForBlock(block = {}, employeesById = new Map()) {
-  return (block.employeeIds ?? [])
-    .map((employeeId) => employeesById.get(Number(employeeId)))
-    .filter(Boolean);
+function getAssignedEmployeesForBlock(block = {}, employeesById = new Map(), dateKey = '', availabilityCalendar = null) {
+  return (block.employeeIds ?? []).reduce((result, employeeId) => {
+    const employee = employeesById.get(Number(employeeId));
+
+    if (!employee) {
+      return result;
+    }
+
+    const meta = getEmployeeAvailabilityMeta(employee, dateKey, availabilityCalendar);
+
+    if (meta.assignable) {
+      result.assignedEmployees.push(employee);
+    } else {
+      result.unavailableEmployees.push({ employee, meta });
+    }
+
+    return result;
+  }, { assignedEmployees: [], unavailableEmployees: [] });
 }
 
 function getEmployeeShiftStatus({ hasAttendanceWindow = false, hasAssignedBlocks = false, availabilityMeta = null, hasPublishedSchedule = false } = {}) {
@@ -352,7 +366,7 @@ function getEmployeeShiftStatus({ hasAttendanceWindow = false, hasAssignedBlocks
   };
 }
 
-function EmployeeMobileTeamBlockDetail({ block, assignedEmployees = [], dateKey = '', availabilityCalendar = null }) {
+function EmployeeMobileTeamBlockDetail({ block, assignedEmployees = [], unavailableEmployees = [] }) {
   const blockStatus = computeBlockStatus(block.required, assignedEmployees.length);
 
   return (
@@ -365,14 +379,13 @@ function EmployeeMobileTeamBlockDetail({ block, assignedEmployees = [], dateKey 
         <span className={`status-chip ${blockStatus}`}>{assignedEmployees.length}/{block.required} คน</span>
       </div>
       <small>{block.tasks.length ? `หน้าที่: ${block.tasks.join(' • ')}` : 'ยังไม่ได้ระบุหน้าที่ของช่วงงานนี้'}</small>
+      {unavailableEmployees.length ? <div className="employee-mobile-team-unavailable-note">ไม่พร้อมลงกะ: {unavailableEmployees.map(({ employee, meta }) => `${employee.name} (${meta.label})`).join(' • ')}</div> : null}
       <div className={`employee-mobile-team-chip-list ${assignedEmployees.length ? '' : 'empty'}`.trim()}>
         {assignedEmployees.length
           ? assignedEmployees.map((employee) => (
             <EmployeeChip
               key={`${block.id}-${employee.id}`}
               employee={employee}
-              dateKey={dateKey}
-              availabilityCalendar={availabilityCalendar}
               className="employee-mobile-team-chip"
             />
           ))
@@ -847,11 +860,17 @@ export function EmployeeMobileShiftPage() {
   const todayScheduleBlocks = useMemo(() => [...getTimeBlocksForDate(timeBlocks, todayDateKey)].sort(sortBlocksByTime), [timeBlocks, todayDateKey]);
   const assignedBlocks = useMemo(() => currentEmployee ? [...getTimeBlocksForDate(timeBlocks, todayDateKey)].sort(sortBlocksByTime).filter((block) => block.employeeIds.includes(currentEmployee.id)) : [], [currentEmployee, timeBlocks, todayDateKey]);
   const todayAttendanceWindow = useMemo(() => currentEmployee ? getEmployeeAttendanceWindowForDate(employeeAttendanceWindows, currentEmployee.id, todayDateKey) : null, [currentEmployee, employeeAttendanceWindows, todayDateKey]);
-  const todayTeamBlocks = useMemo(() => todayScheduleBlocks.map((block) => ({
-    ...block,
-    assignedEmployees: getAssignedEmployeesForBlock(block, employeesById),
-  })), [employeesById, todayScheduleBlocks]);
+  const todayTeamBlocks = useMemo(() => todayScheduleBlocks.map((block) => {
+    const { assignedEmployees, unavailableEmployees } = getAssignedEmployeesForBlock(block, employeesById, todayDateKey, employeeAvailabilityCalendar);
+
+    return {
+      ...block,
+      assignedEmployees,
+      unavailableEmployees,
+    };
+  }), [employeeAvailabilityCalendar, employeesById, todayDateKey, todayScheduleBlocks]);
   const todayScheduledEmployeeCount = useMemo(() => new Set(todayTeamBlocks.flatMap((block) => block.assignedEmployees.map((employee) => employee.id))).size, [todayTeamBlocks]);
+  const todayUnavailableEmployeeCount = useMemo(() => new Set(todayTeamBlocks.flatMap((block) => block.unavailableEmployees.map(({ employee }) => employee.id))).size, [todayTeamBlocks]);
 
   useEffect(() => {
     setExpandedDateKey(todayDateKey);
@@ -862,10 +881,16 @@ export function EmployeeMobileShiftPage() {
     const scheduleBlocks = [...getTimeBlocksForDate(timeBlocks, dateKey)].sort(sortBlocksByTime);
     const dayBlocks = currentEmployee ? scheduleBlocks.filter((block) => block.employeeIds.includes(currentEmployee.id)) : [];
     const availabilityMeta = currentEmployee ? getEmployeeAvailabilityMeta(currentEmployee, dateKey, employeeAvailabilityCalendar) : null;
-    const teamBlocks = scheduleBlocks.map((block) => ({
-      ...block,
-      assignedEmployees: getAssignedEmployeesForBlock(block, employeesById),
-    }));
+    const teamBlocks = scheduleBlocks.map((block) => {
+      const { assignedEmployees, unavailableEmployees } = getAssignedEmployeesForBlock(block, employeesById, dateKey, employeeAvailabilityCalendar);
+
+      return {
+        ...block,
+        assignedEmployees,
+        unavailableEmployees,
+      };
+    });
+    const unavailableEmployeeCount = new Set(teamBlocks.flatMap((block) => block.unavailableEmployees.map(({ employee }) => employee.id))).size;
 
     return {
       date,
@@ -877,6 +902,7 @@ export function EmployeeMobileShiftPage() {
       blocks: dayBlocks,
       teamBlocks,
       teamEmployeeCount: new Set(teamBlocks.flatMap((block) => block.assignedEmployees.map((employee) => employee.id))).size,
+      unavailableEmployeeCount,
       availabilityMeta,
     };
   }), [currentEmployee, employeeAttendanceWindows, employeeAvailabilityCalendar, employeesById, timeBlocks, todayDate]);
@@ -928,7 +954,7 @@ export function EmployeeMobileShiftPage() {
               <strong>ตารางทีมวันนี้</strong>
               <span className={`status-chip ${todayTeamBlocks.length ? 'ok' : 'attention'}`}>{todayTeamBlocks.length ? `${todayTeamBlocks.length} ช่วงงาน` : 'ยังไม่มีตารางทีม'}</span>
             </div>
-            <p>{todayTeamBlocks.length ? `วันนี้มีพนักงานลงงาน ${todayScheduledEmployeeCount} คน` : 'วันนี้ยังไม่มีช่วงงานของทีมในระบบ'}</p>
+            <p>{todayTeamBlocks.length ? `วันนี้มีพนักงานลงงาน ${todayScheduledEmployeeCount} คน${todayUnavailableEmployeeCount ? ` • ไม่พร้อมลงกะ ${todayUnavailableEmployeeCount} คน` : ''}` : 'วันนี้ยังไม่มีช่วงงานของทีมในระบบ'}</p>
             <div className={`employee-mobile-week-list ${todayTeamBlocks.length ? '' : 'empty'}`.trim()}>
               {todayTeamBlocks.length
                 ? todayTeamBlocks.map((block) => (
@@ -936,8 +962,7 @@ export function EmployeeMobileShiftPage() {
                     key={`${todayDateKey}-${block.id}`}
                     block={block}
                     assignedEmployees={block.assignedEmployees}
-                    dateKey={todayDateKey}
-                    availabilityCalendar={employeeAvailabilityCalendar}
+                    unavailableEmployees={block.unavailableEmployees}
                   />
                 ))
                 : <span>วันนี้ยังไม่มีช่วงงานของทีมในตาราง</span>}
@@ -973,7 +998,7 @@ export function EmployeeMobileShiftPage() {
                   <span className={`status-chip ${dayStatus.tone}`}>{dayStatus.label}</span>
                 </div>
                 <div className="employee-mobile-schedule-item-summary">
-                  {day.teamBlocks.length ? <span>พนักงานในตาราง {day.teamEmployeeCount} คน • เปิดดูหน้าที่และคนในแต่ละกะ</span> : <span>{dayStatus.noAssignmentText}</span>}
+                  {day.teamBlocks.length ? <span>พนักงานในตาราง {day.teamEmployeeCount} คน{day.unavailableEmployeeCount ? ` • ไม่พร้อมลงกะ ${day.unavailableEmployeeCount} คน` : ''} • เปิดดูหน้าที่และคนในแต่ละกะ</span> : <span>{dayStatus.noAssignmentText}</span>}
                 </div>
                 {isExpanded ? <div className={`employee-mobile-week-list ${day.teamBlocks.length ? '' : 'empty'}`.trim()}>
                   {day.teamBlocks.length ? day.teamBlocks.map((block) => (
@@ -981,8 +1006,7 @@ export function EmployeeMobileShiftPage() {
                       key={`${day.dateKey}-${block.id}`}
                       block={block}
                       assignedEmployees={block.assignedEmployees}
-                      dateKey={day.dateKey}
-                      availabilityCalendar={employeeAvailabilityCalendar}
+                      unavailableEmployees={block.unavailableEmployees}
                     />
                   )) : <span>{dayStatus.noAssignmentText}</span>}
                 </div> : null}
