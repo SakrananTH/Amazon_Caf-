@@ -19,7 +19,24 @@ function findDefaultRemoveBlock(blocks) {
 
 function ManagerDesktopGate({ children }) {
   const location = useLocation();
-  const { managerSessionActive } = useAppState();
+  const { isSupabaseSyncReady, managerSessionActive } = useAppState();
+
+  if (!isSupabaseSyncReady && managerSessionActive) {
+    return (
+      <div className="screen-stage desktop">
+        <div className="manager-login-shell">
+          <section className="panel-card manager-login-card">
+            <div className="panel-head manager-login-head">
+              <div>
+                <h3>กำลังกู้คืนเซสชันผู้จัดการ</h3>
+                <p>รอสักครู่ ระบบกำลังเปิดข้อมูลล่าสุดของผู้จัดการ</p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   if (!managerSessionActive) {
     return <Navigate to={routePaths.managerLogin} replace state={{ returnTo: location.pathname, portalMessage: 'กรุณาเข้าสู่ระบบผู้จัดการก่อนใช้งาน' }} />;

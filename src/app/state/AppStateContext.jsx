@@ -4,10 +4,42 @@ import { isSupabaseConfigured, loadAppStateFromSupabase, loginEmployeePortal, lo
 
 const AppStateContext = createContext(null);
 const STORAGE_KEY = 'amazon-schedule-ui/state';
+const MANAGER_SESSION_STORAGE_KEY = 'amazon-schedule-ui/session/manager';
+const EMPLOYEE_SESSION_STORAGE_KEY = 'amazon-schedule-ui/session/employee';
 const STATE_VERSION = 8;
 export const MAX_EMPLOYEES = 5;
 const SCHEDULE_LOOKAHEAD_DAYS = 28;
 const MAX_INVENTORY_HISTORY_ITEMS = 80;
+
+function readManagerSessionActive(fallbackValue = false) {
+  if (typeof window === 'undefined') {
+    return fallbackValue;
+  }
+
+  const storedValue = window.localStorage.getItem(MANAGER_SESSION_STORAGE_KEY);
+  if (storedValue === '1') {
+    return true;
+  }
+  if (storedValue === '0') {
+    return false;
+  }
+
+  return fallbackValue;
+}
+
+function readEmployeePortalSessionId(fallbackValue = null) {
+  if (typeof window === 'undefined') {
+    return fallbackValue;
+  }
+
+  const storedValue = window.localStorage.getItem(EMPLOYEE_SESSION_STORAGE_KEY);
+  const parsedValue = Number(storedValue);
+  if (Number.isFinite(parsedValue)) {
+    return parsedValue;
+  }
+
+  return fallbackValue;
+}
 
 export const employeeAvailabilityOptions = [
   { value: 'ready', label: 'พร้อมลงกะ', shortLabel: 'พร้อม', tone: 'ok', assignable: true, hint: 'นับเป็นกำลังคนจริง' },
@@ -1028,10 +1060,16 @@ function readInitialState() {
   try {
     const storedValue = window.localStorage.getItem(STORAGE_KEY);
     if (!storedValue) {
-      return fallbackState;
+      return {
+        ...fallbackState,
+        managerSessionActive: readManagerSessionActive(false),
+        employeePortalSessionId: readEmployeePortalSessionId(null),
+      };
     }
 
     const parsedValue = JSON.parse(storedValue);
+    const persistedManagerSessionActive = readManagerSessionActive(Boolean(parsedValue.managerSessionActive));
+    const persistedEmployeeSessionId = readEmployeePortalSessionId(Number.isFinite(parsedValue.employeePortalSessionId) ? parsedValue.employeePortalSessionId : null);
     if (parsedValue.version !== STATE_VERSION) {
       const migratedEmployees = Array.isArray(parsedValue.employees) ? mergeSeedEmployees(parsedValue.employees) : fallbackState.employees;
       const normalizedEmployees = normalizeEmployees(migratedEmployees);
@@ -1040,8 +1078,8 @@ function readInitialState() {
       return {
         ...fallbackState,
         employees: normalizedEmployees,
-        managerSessionActive: Boolean(parsedValue.managerSessionActive),
-        employeePortalSessionId: Number.isFinite(parsedValue.employeePortalSessionId) ? parsedValue.employeePortalSessionId : null,
+        managerSessionActive: persistedManagerSessionActive,
+        employeePortalSessionId: persistedEmployeeSessionId,
         calendarDaySettings: normalizeCalendarDaySettings(parsedValue.calendarDaySettings ?? fallbackState.calendarDaySettings),
         employeeAvailabilityCalendar: (() => {
           const normalizedCalendar = normalizeAvailabilityCalendar(parsedValue.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
@@ -1078,8 +1116,8 @@ function readInitialState() {
     return {
       version: STATE_VERSION,
       employees: normalizedEmployees,
-      managerSessionActive: Boolean(parsedValue.managerSessionActive),
-      employeePortalSessionId: Number.isFinite(parsedValue.employeePortalSessionId) ? parsedValue.employeePortalSessionId : null,
+      managerSessionActive: persistedManagerSessionActive,
+      employeePortalSessionId: persistedEmployeeSessionId,
       calendarDaySettings: normalizeCalendarDaySettings(parsedValue.calendarDaySettings ?? fallbackState.calendarDaySettings),
       employeeAvailabilityCalendar: normalizedCalendar,
       employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(parsedValue.employeeAttendanceWindows ?? buildAttendanceWindowsFromBlocks(nextTimeBlocks, allowedEmployeeIds), allowedEmployeeIds, employeesById, normalizedCalendar),
@@ -1291,6 +1329,24 @@ export function AppStateProvider({ children }) {
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (managerSessionActive) {
+      window.localStorage.setItem(MANAGER_SESSION_STORAGE_KEY, '1');
+    } else {
+      window.localStorage.removeItem(MANAGER_SESSION_STORAGE_KEY);
+    }
+
+    if (Number.isFinite(employeePortalSessionId)) {
+      window.localStorage.setItem(EMPLOYEE_SESSION_STORAGE_KEY, String(employeePortalSessionId));
+    } else {
+      window.localStorage.removeItem(EMPLOYEE_SESSION_STORAGE_KEY);
+    }
+  }, [employeePortalSessionId, managerSessionActive]);
 
   useEffect(() => {
     if (!useSupabaseBackend || !isSupabaseConfigured || !isSupabaseSyncReady) {

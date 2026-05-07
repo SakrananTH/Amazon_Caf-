@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, Copy, PencilLine, Plus, Save, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight, Copy, PencilLine, Plus, Trash2, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import DesktopWorkspace from './DesktopWorkspace.jsx';
 import { DeleteTimeWindowConfirm } from './ModalScreens.jsx';
@@ -216,20 +216,24 @@ export default function WeeklySchedulePage() {
     setNotice(`คัดลอกกะงาน ${result.copiedCount} กะ ไปวันถัดไปแล้ว`);
   };
 
-  const handleSaveAttendance = () => {
+  useEffect(() => {
+    if (!attendanceSyncSummary.removedCount) {
+      return;
+    }
+
     const result = syncScheduleAssignmentsWithAttendance();
     if (!result) {
-      setNotice('บันทึกเวลาเข้างานแล้ว');
+      setNotice('บันทึกเวลาเข้างานอัตโนมัติแล้ว');
       return;
     }
 
     if (result.removedCount) {
-      setNotice(`บันทึกเวลาเข้างานแล้ว และอัปเดตตารางงาน ${result.updatedBlockCount} ช่วง ลบพนักงานที่ไม่ตรงเวลาเข้างานออก ${result.removedCount} รายการ`);
+      setNotice(`บันทึกเวลาเข้างานอัตโนมัติแล้ว และอัปเดตตารางงาน ${result.updatedBlockCount} ช่วง ลบพนักงานที่ไม่ตรงเวลาเข้างานออก ${result.removedCount} รายการ`);
       return;
     }
 
-    setNotice('บันทึกเวลาเข้างานแล้ว');
-  };
+    setNotice('บันทึกเวลาเข้างานอัตโนมัติแล้ว');
+  }, [attendanceSyncSummary.removedCount, attendanceSyncSummary.updatedBlockCount, syncScheduleAssignmentsWithAttendance]);
 
   const weekStartLabel = weekDates[0] ? formatThaiWeekLabel(weekDates[0]) : '-';
   const weekEndLabel = weekDates[6] ? formatThaiWeekLabel(weekDates[6]) : '-';
@@ -252,15 +256,6 @@ export default function WeeklySchedulePage() {
             <button type="button" className="ghost-button schedule-today-button" onClick={() => { setWeekOffset(0); setNotice(''); }}>สัปดาห์นี้</button>
           </div>
           <button type="button" className="ghost-button" onClick={handleCopyDay}><Copy size={16} /> คัดลอกวันถัดไป</button>
-          <button
-            type="button"
-            className={hasPendingAttendanceSync ? 'primary-inline' : 'ghost-button text-success'}
-            onClick={handleSaveAttendance}
-          >
-            <Save size={16} />
-            บันทึกเวลาเข้างาน
-            {hasPendingAttendanceSync ? <span className="action-badge">{attendanceSyncSummary.removedCount}</span> : null}
-          </button>
           <button type="button" className="ghost-button" onClick={() => navigate(routePaths.desktopSchedule)}>กลับหน้าตาราง</button>
         </div>
       }
