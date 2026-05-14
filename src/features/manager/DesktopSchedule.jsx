@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Copy, PencilLine, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import DesktopWorkspace from './DesktopWorkspace.jsx';
@@ -21,8 +21,15 @@ function getRoundStatusLabel(required, assigned) {
 export default function DesktopSchedule({ blocks, employees, employeeAttendanceWindows, employeeAvailabilityCalendar, moveEmployeeToBlock, autoAssignEmployeesToBlock, copyDaySchedule, deleteTimeBlock }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const boardScrollRef = useRef(null);
+  const boardDragRef = useRef({
+    pointerId: null,
+    startX: 0,
+    startScrollLeft: 0,
+  });
   const [dayOffset, setDayOffset] = useState(0);
   const [dragState, setDragState] = useState(null);
+  const [isBoardDragging, setIsBoardDragging] = useState(false);
   const [copyNotice, setCopyNotice] = useState('');
   const [pendingDeleteBlock, setPendingDeleteBlock] = useState(null);
 
@@ -83,6 +90,59 @@ export default function DesktopSchedule({ blocks, employees, employeeAttendanceW
 
     setDayOffset((currentValue) => currentValue + 1);
     setCopyNotice(`คัดลอกตาราง ${result.copiedCount} กะ ไปวันถัดไปแล้ว`);
+  };
+
+  const stopBoardDrag = (pointerId = null) => {
+    const boardElement = boardScrollRef.current;
+    if (boardElement && pointerId !== null && boardElement.hasPointerCapture?.(pointerId)) {
+      boardElement.releasePointerCapture(pointerId);
+    }
+
+    boardDragRef.current = {
+      pointerId: null,
+      startX: 0,
+      startScrollLeft: boardElement?.scrollLeft ?? 0,
+    };
+    setIsBoardDragging(false);
+  };
+
+  const handleBoardPointerDown = (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) {
+      return;
+    }
+
+    if (event.target.closest('button, a, input, select, textarea, [draggable="true"]')) {
+      return;
+    }
+
+    const boardElement = boardScrollRef.current;
+    if (!boardElement || boardElement.scrollWidth <= boardElement.clientWidth) {
+      return;
+    }
+
+    boardDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: boardElement.scrollLeft,
+    };
+    boardElement.setPointerCapture?.(event.pointerId);
+    setIsBoardDragging(true);
+  };
+
+  const handleBoardPointerMove = (event) => {
+    const boardElement = boardScrollRef.current;
+    const dragContext = boardDragRef.current;
+    if (!isBoardDragging || !boardElement || dragContext.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragContext.startX;
+    if (!deltaX) {
+      return;
+    }
+
+    event.preventDefault();
+    boardElement.scrollLeft = dragContext.startScrollLeft - deltaX;
   };
 
   return (
@@ -147,7 +207,14 @@ export default function DesktopSchedule({ blocks, employees, employeeAttendanceW
           <span>ปุ่มเพิ่มอัตโนมัติจะเลือกเฉพาะคนที่พร้อมลงกะ และเรียงตามบทบาทงานก่อน</span>
         </div>
 
-        <div className="board-horizontal-scroll">
+        <div
+          ref={boardScrollRef}
+          className={`board-horizontal-scroll ${isBoardDragging ? 'is-dragging' : ''}`.trim()}
+          onPointerDown={handleBoardPointerDown}
+          onPointerMove={handleBoardPointerMove}
+          onPointerUp={(event) => stopBoardDrag(event.pointerId)}
+          onPointerCancel={(event) => stopBoardDrag(event.pointerId)}
+        >
           {dateBlocks.map((block) => {
             const assignedEmployees = block.employeeIds.map((id) => findEmployee(id)).filter(Boolean);
             const assigned = assignedEmployees.filter((employee) => isAssignableOnBoardDate(employee)).length;
