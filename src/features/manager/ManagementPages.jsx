@@ -1893,12 +1893,12 @@ export function SettingsPage() {
               <input type="checkbox" name="autoCloseResolvedRequests" checked={formState.autoCloseResolvedRequests} onChange={handleChange} />
               <span>ปิดคำขอให้อัตโนมัติเมื่อแก้ไขเสร็จแล้ว</span>
             </label>
-          </article>
-        </div>
 
-        <div className="settings-actions">
-          {saveMessage ? <span className="save-note">{saveMessage}</span> : null}
-          <button type="submit" className="primary-inline">บันทึกการตั้งค่า</button>
+            <div className="settings-actions">
+              {saveMessage ? <span className="save-note">{saveMessage}</span> : null}
+              <button type="submit" className="primary-inline">บันทึกการตั้งค่า</button>
+            </div>
+          </article>
         </div>
       </form>
     </DesktopWorkspace>
