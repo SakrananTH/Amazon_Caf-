@@ -1,13 +1,27 @@
+import { lazy } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import DesktopSchedule from '../features/manager/DesktopSchedule.jsx';
-import DesktopWorkspace from '../features/manager/DesktopWorkspace.jsx';
-import EmployeeHolidayPlanner from '../features/manager/EmployeeHolidayPlanner.jsx';
-import { EmployeesPage, HomePage, InventoryCatalogPage, ManagerLoginPage, ManagerNotificationsPage, ReportsPage, SettingsPage } from '../features/manager/ManagementPages.jsx';
-import { EmployeeMobileHomePage, EmployeeMobileInventoryPage, EmployeeMobileIssuePage, EmployeeMobileLoginPage, EmployeeMobileShiftPage } from '../features/employee/MobileEmployeePortal.jsx';
-import { AddEmployeeSheet, RemoveConfirm, RequestHelp, ScheduleBlockEditor } from '../features/manager/ModalScreens.jsx';
-import WeeklySchedulePage from '../features/manager/WeeklySchedulePage.jsx';
 import { routePaths } from './routes.js';
 import { isEmployeeEligibleForAttendanceWindow, isEmployeeEligibleForScheduleBlock, isEmployeeScheduleEligible, useAppState } from './state/AppStateContext.jsx';
+
+const DesktopSchedule = lazy(() => import('../features/manager/DesktopSchedule.jsx'));
+const EmployeeHolidayPlanner = lazy(() => import('../features/manager/EmployeeHolidayPlanner.jsx'));
+const WeeklySchedulePage = lazy(() => import('../features/manager/WeeklySchedulePage.jsx'));
+const AddEmployeeSheet = lazy(() => import('../features/manager/ModalScreens.jsx').then((module) => ({ default: module.AddEmployeeSheet })));
+const RemoveConfirm = lazy(() => import('../features/manager/ModalScreens.jsx').then((module) => ({ default: module.RemoveConfirm })));
+const RequestHelp = lazy(() => import('../features/manager/ModalScreens.jsx').then((module) => ({ default: module.RequestHelp })));
+const ScheduleBlockEditor = lazy(() => import('../features/manager/ModalScreens.jsx').then((module) => ({ default: module.ScheduleBlockEditor })));
+const HomePage = lazy(() => import('../features/manager/ManagementPages.jsx').then((module) => ({ default: module.HomePage })));
+const EmployeesPage = lazy(() => import('../features/manager/ManagementPages.jsx').then((module) => ({ default: module.EmployeesPage })));
+const InventoryCatalogPage = lazy(() => import('../features/manager/ManagementPages.jsx').then((module) => ({ default: module.InventoryCatalogPage })));
+const ManagerLoginPage = lazy(() => import('../features/manager/ManagementPages.jsx').then((module) => ({ default: module.ManagerLoginPage })));
+const ManagerNotificationsPage = lazy(() => import('../features/manager/ManagementPages.jsx').then((module) => ({ default: module.ManagerNotificationsPage })));
+const ReportsPage = lazy(() => import('../features/manager/ManagementPages.jsx').then((module) => ({ default: module.ReportsPage })));
+const SettingsPage = lazy(() => import('../features/manager/ManagementPages.jsx').then((module) => ({ default: module.SettingsPage })));
+const EmployeeMobileHomePage = lazy(() => import('../features/employee/MobileEmployeePortal.jsx').then((module) => ({ default: module.EmployeeMobileHomePage })));
+const EmployeeMobileInventoryPage = lazy(() => import('../features/employee/MobileEmployeePortal.jsx').then((module) => ({ default: module.EmployeeMobileInventoryPage })));
+const EmployeeMobileIssuePage = lazy(() => import('../features/employee/MobileEmployeePortal.jsx').then((module) => ({ default: module.EmployeeMobileIssuePage })));
+const EmployeeMobileLoginPage = lazy(() => import('../features/employee/MobileEmployeePortal.jsx').then((module) => ({ default: module.EmployeeMobileLoginPage })));
+const EmployeeMobileShiftPage = lazy(() => import('../features/employee/MobileEmployeePortal.jsx').then((module) => ({ default: module.EmployeeMobileShiftPage })));
 
 function findDefaultAddBlock(blocks) {
   return blocks.find((block) => block.employeeIds.length < block.required) ?? blocks[0] ?? null;

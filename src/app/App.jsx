@@ -1,9 +1,26 @@
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { screenCatalog } from './screenCatalog.jsx';
 import { AppStateProvider } from './state/AppStateContext.jsx';
 
 const Router = import.meta.env.PROD ? HashRouter : BrowserRouter;
+
+function RouteLoadingFallback() {
+  return (
+    <div className="screen-stage desktop">
+      <div className="manager-login-shell">
+        <section className="panel-card manager-login-card">
+          <div className="panel-head manager-login-head">
+            <div>
+              <h3>กำลังเปิดหน้าถัดไป</h3>
+              <p>รอสักครู่ ระบบกำลังโหลดข้อมูลของหน้านี้</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
 
 function RoutedApp() {
   const location = useLocation();
@@ -18,7 +35,17 @@ function RoutedApp() {
       <Routes>
         {screenCatalog.map((screen) => {
           const ScreenComponent = screen.component;
-          return <Route key={screen.path} path={screen.path} element={<ScreenComponent />} />;
+          return (
+            <Route
+              key={screen.path}
+              path={screen.path}
+              element={(
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <ScreenComponent />
+                </Suspense>
+              )}
+            />
+          );
         })}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
