@@ -2185,7 +2185,7 @@ a, button {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) 360px;
   gap: var(--space-lg);
-  align-items: start;
+  align-items: stretch;
   min-height: 0;
 }
 
@@ -3702,11 +3702,12 @@ a, button {
 }
 
 .report-screen-shell {
+  height: 100%;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 14px;
-  align-content: start;
+  align-content: stretch;
 }
 
 .report-page-actions {
@@ -3731,7 +3732,7 @@ a, button {
   min-height: 0;
   min-width: 0;
   gap: 12px;
-  align-self: start;
+  align-self: stretch;
 }
 
 .report-section-head,
@@ -3856,12 +3857,13 @@ a, button {
 }
 
 .report-card-list {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   width: 100%;
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
   padding-right: 4px;
+  scroll-behavior: smooth;
 }
 
 .report-card-list::-webkit-scrollbar {
