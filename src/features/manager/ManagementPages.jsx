@@ -441,7 +441,7 @@ export function EmployeeSchedulePage() {
 }
 
 export function EmployeesPage() {
-  const { createEmployee, deleteEmployee, employees, resetEmployeePortalPassword, timeBlocks, updateEmployee } = useAppState();
+  const { createEmployee, deleteEmployee, employees, settings, timeBlocks, updateEmployee } = useAppState();
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(employees[0]?.id ?? null);
@@ -453,9 +453,10 @@ export function EmployeesPage() {
   const [showEmployeePassword, setShowEmployeePassword] = useState(false);
   const [isRoleEditorOpen, setIsRoleEditorOpen] = useState(false);
   const roleTitleInputRef = useRef(null);
+  const sharedEmployeePortalPassword = String(settings.employeePortalPassword ?? '').trim();
 
   const filteredEmployees = useMemo(() => employees.filter((employee) => {
-    const matchesQuery = query.trim() ? `${employee.name} ${employee.role} ${employee.phone} ${employee.employeeCode ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()) : true;
+    const matchesQuery = query.trim() ? `${employee.name} ${employee.role} ${employee.employeeCode ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()) : true;
     const matchesRole = roleFilter === 'all' ? true : employee.role === roleFilter;
     return matchesQuery && matchesRole;
   }), [employees, query, roleFilter]);
@@ -494,14 +495,14 @@ export function EmployeesPage() {
         roleHint: rolePresentation.hint,
         phone: selectedEmployee.phone,
         employeeCode: selectedEmployee.employeeCode ?? '',
-        password: selectedEmployee.password ?? selectedEmployee.employeeCode ?? '',
+        password: sharedEmployeePortalPassword,
         avatar: selectedEmployee.avatar,
         skillsText: stripRoleMetadataSkills(selectedEmployee.skills).join(', '),
         availabilityStatus: selectedEmployee.availabilityStatus ?? 'ready',
         active: selectedEmployee.active,
       });
     }
-  }, [employees, mode, selectedEmployee]);
+  }, [employees, mode, selectedEmployee, sharedEmployeePortalPassword]);
 
   useEffect(() => {
     if (employeeLimitReached && mode === 'create') {
@@ -512,7 +513,7 @@ export function EmployeesPage() {
 
   useEffect(() => {
     setCopyMessage('');
-  }, [mode, selectedEmployeeId, formState.employeeCode, formState.password]);
+  }, [mode, selectedEmployeeId, formState.employeeCode, sharedEmployeePortalPassword]);
 
   useEffect(() => {
     setEditorTab('profile');
@@ -600,7 +601,7 @@ export function EmployeesPage() {
     event.preventDefault();
     const payload = normalizePayload();
 
-    if (!payload.name.trim() || !payload.phone.trim()) {
+    if (!payload.name.trim()) {
       return;
     }
 
@@ -613,7 +614,7 @@ export function EmployeesPage() {
 
       setSelectedEmployeeId(nextEmployee.id);
       setMode('edit');
-      setSaveMessage(`เพิ่มพนักงาน ${nextEmployee.name} แล้ว • เข้าระบบด้วย ${nextEmployee.phone} / ${nextEmployee.password}`);
+      setSaveMessage(`เพิ่มพนักงาน ${nextEmployee.name} แล้ว • ใช้รหัสรวมพนักงาน ${sharedEmployeePortalPassword}`);
       return;
     }
 
@@ -623,7 +624,7 @@ export function EmployeesPage() {
 
     const updatedEmployee = updateEmployee(selectedEmployee.id, payload);
     if (updatedEmployee) {
-      setSaveMessage(`บันทึกข้อมูลของ ${updatedEmployee.name} แล้ว • ใช้เบอร์ ${updatedEmployee.phone} / ${updatedEmployee.password}`);
+      setSaveMessage(`บันทึกข้อมูลของ ${updatedEmployee.name} แล้ว • ใช้รหัสรวมพนักงาน ${sharedEmployeePortalPassword}`);
     }
   };
 
@@ -643,47 +644,27 @@ export function EmployeesPage() {
     setSaveMessage(`ลบ ${removedEmployee.name} ออกจากระบบแล้ว`);
   };
 
-  const handleResetEmployeePassword = () => {
-    if (!selectedEmployee) {
-      return;
-    }
-
-    const updatedEmployee = resetEmployeePortalPassword(selectedEmployee.id);
-    if (!updatedEmployee) {
-      return;
-    }
-
-    setFormState((currentState) => ({
-      ...currentState,
-      password: updatedEmployee.password,
-    }));
-    setSaveMessage(`สร้างรหัสผ่านใหม่ของ ${updatedEmployee.name} แล้ว • ใช้ ${updatedEmployee.phone} / ${updatedEmployee.password}`);
-  };
-
   const handleCopyEmployeePassword = async () => {
-    const password = String(formState.password ?? '').trim();
-    if (!password || mode !== 'edit') {
+    if (!sharedEmployeePortalPassword || mode !== 'edit') {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(password);
-      setCopyMessage(`คัดลอกรหัสผ่าน ${password} แล้ว`);
+      await navigator.clipboard.writeText(sharedEmployeePortalPassword);
+      setCopyMessage(`คัดลอกรหัสรวมพนักงาน ${sharedEmployeePortalPassword} แล้ว`);
     } catch {
-      setCopyMessage('คัดลอกรหัสผ่านไม่สำเร็จ ลองใหม่อีกครั้ง');
+      setCopyMessage('คัดลอกรหัสรวมพนักงานไม่สำเร็จ ลองใหม่อีกครั้ง');
     }
   };
 
   const handleCopyEmployeeCredentials = async () => {
     const employeeName = String(formState.name ?? '').trim();
-    const phone = String(formState.phone ?? '').trim();
-    const password = String(formState.password ?? '').trim();
-    if (!employeeName || !phone || !password || mode !== 'edit') {
+    if (!employeeName || !sharedEmployeePortalPassword || mode !== 'edit') {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(`สวัสดี ${employeeName}\nข้อมูลเข้าสู่ระบบพนักงานของคุณ\nเบอร์โทร: ${phone}\nรหัสผ่าน: ${password}\nกรุณาเก็บข้อมูลนี้ไว้สำหรับเข้าใช้งาน`);
+      await navigator.clipboard.writeText(`สวัสดี ${employeeName}\nข้อมูลเข้าสู่ระบบพนักงานของคุณ\nให้เลือกรายชื่อของตัวเองในหน้าเข้าพนักงาน\nรหัสผ่านรวมพนักงาน: ${sharedEmployeePortalPassword}\nกรุณาเก็บข้อมูลนี้ไว้สำหรับเข้าใช้งาน`);
       setCopyMessage(`คัดลอกข้อความพร้อมส่งของ ${employeeName} แล้ว`);
     } catch {
       setCopyMessage('คัดลอกข้อความพร้อมส่งไม่สำเร็จ ลองใหม่อีกครั้ง');
@@ -692,14 +673,12 @@ export function EmployeesPage() {
 
   const handleCopyEmployeeShortCredentials = async () => {
     const employeeName = String(formState.name ?? '').trim();
-    const phone = String(formState.phone ?? '').trim();
-    const password = String(formState.password ?? '').trim();
-    if (!employeeName || !phone || !password || mode !== 'edit') {
+    if (!employeeName || !sharedEmployeePortalPassword || mode !== 'edit') {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(`${employeeName} เข้าโหมดพนักงานด้วย เบอร์ ${phone} รหัสผ่าน ${password}`);
+      await navigator.clipboard.writeText(`${employeeName} เข้าโหมดพนักงานด้วยการเลือกรายชื่อของตัวเอง แล้วใช้รหัสรวม ${sharedEmployeePortalPassword}`);
       setCopyMessage(`คัดลอกข้อความสั้นสำหรับ ${employeeName} แล้ว`);
     } catch {
       setCopyMessage('คัดลอกข้อความสั้นไม่สำเร็จ ลองใหม่อีกครั้ง');
@@ -720,7 +699,7 @@ export function EmployeesPage() {
           </div>
 
           <div className="employee-toolbar">
-            <input className="text-input" placeholder="ค้นหาชื่อ เบอร์โทร รหัส หรือบทบาท" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input className="text-input" placeholder="ค้นหาชื่อ รหัส หรือบทบาท" value={query} onChange={(event) => setQuery(event.target.value)} />
             <select className="text-input" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
               <option value="all">ทุกบทบาท</option>
               {employeeRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -739,7 +718,7 @@ export function EmployeesPage() {
                     <strong>{employee.name}</strong>
                     <span className="employee-list-meta-row">
                       <small>{employee.role}</small>
-                      <small>{employee.phone}</small>
+                      <small>{employee.active ? 'พร้อมใช้งาน' : 'พักงาน'}</small>
                     </span>
                     <span className="employee-list-meta-row">
                       <small>รหัส {employee.employeeCode}</small>
@@ -786,8 +765,8 @@ export function EmployeesPage() {
                       <input className="text-input" name="name" value={formState.name} onChange={handleChange} />
                     </label>
                     <label className="field-group">
-                      <span>เบอร์โทรศัพท์</span>
-                      <input className="text-input" name="phone" value={formState.phone} onChange={handleChange} />
+                      <span>รหัสพนักงาน</span>
+                      <input className="text-input" value={mode === 'create' ? 'สร้างอัตโนมัติเมื่อบันทึก' : formState.employeeCode} readOnly />
                     </label>
                   </div>
 
@@ -843,18 +822,18 @@ export function EmployeesPage() {
                 <section className="employee-profile-card employee-access-primary">
                   <div className="employee-access-credential-grid">
                     <label className="field-group">
-                      <span>เบอร์โทรศัพท์สำหรับเข้าใช้</span>
-                      <input className="text-input" value={formState.phone} readOnly />
+                      <span>รายชื่อที่ใช้เข้าโหมดพนักงาน</span>
+                      <input className="text-input" value={formState.name || '-'} readOnly />
                     </label>
 
                     <label className="field-group">
-                      <span>รหัสผ่าน</span>
+                      <span>รหัสผ่านรวมพนักงาน</span>
                       <div className="employee-access-password-row">
-                        <input className="text-input employee-access-password-input" type={showEmployeePassword ? 'text' : 'password'} name="password" value={formState.password} onChange={handleChange} placeholder="ถ้าว่าง ระบบจะใช้รหัสเดียวกับรหัสพนักงาน" />
+                        <input className="text-input employee-access-password-input" type={showEmployeePassword ? 'text' : 'password'} value={sharedEmployeePortalPassword} readOnly placeholder="ตั้งค่าจากหน้าตั้งค่า" />
                         <button type="button" className="employee-access-password-toggle" onClick={() => setShowEmployeePassword((currentValue) => !currentValue)} aria-label={showEmployeePassword ? 'ซ่อนรหัสผ่านพนักงาน' : 'แสดงรหัสผ่านพนักงาน'}>
                           {showEmployeePassword ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
-                        <button type="button" className="ghost-button employee-login-copy-button employee-access-inline-copy" onClick={handleCopyEmployeePassword} disabled={mode !== 'edit' || !formState.password.trim()}>
+                        <button type="button" className="ghost-button employee-login-copy-button employee-access-inline-copy" onClick={handleCopyEmployeePassword} disabled={mode !== 'edit' || !sharedEmployeePortalPassword}>
                           <Copy size={15} /> คัดลอก
                         </button>
                       </div>
@@ -866,30 +845,30 @@ export function EmployeesPage() {
                     <input className="text-input" value={mode === 'create' ? 'สร้างอัตโนมัติเมื่อบันทึก' : formState.employeeCode} readOnly />
                   </label>
 
-                  <small className="employee-login-credential-note">พนักงานใช้เบอร์โทรและรหัสผ่านสำหรับเข้าโหมดพนักงาน ส่วนรหัสพนักงานเก็บไว้เป็นข้อมูลอ้างอิงในระบบ</small>
+                  <small className="employee-login-credential-note">พนักงานใช้การเลือกรายชื่อของตัวเองและรหัสผ่านรวมพนักงานสำหรับเข้าโหมดพนักงาน ส่วนรหัสพนักงานเก็บไว้เป็นข้อมูลอ้างอิงในระบบ</small>
                   {copyMessage ? <small className="employee-login-copy-status">{copyMessage}</small> : null}
                 </section>
 
                 <aside className="employee-profile-card employee-access-side">
                   <div className="employee-editor-note-card employee-access-note-card">
                     <strong>ทางลัดจัดการสิทธิ์เข้าใช้</strong>
-                    <p>ดูรหัสผ่านแบบมองเห็นได้ คัดลอกข้อมูลส่งให้พนักงาน หรือสร้างรหัสผ่านใหม่ได้จากกล่องนี้</p>
+                    <p>คัดลอกรหัสรวมพนักงานหรือข้อความพร้อมส่งให้พนักงานได้จากกล่องนี้ โดยไม่ต้องใช้เบอร์โทรรายคน</p>
                   </div>
 
                   <div className="employee-login-copy-actions employee-access-quick-actions">
-                    <button type="button" className="ghost-button employee-login-copy-button" onClick={handleCopyEmployeeCredentials} disabled={mode !== 'edit' || !formState.name.trim() || !formState.phone.trim() || !formState.password.trim()}>
+                    <button type="button" className="ghost-button employee-login-copy-button" onClick={handleCopyEmployeeCredentials} disabled={mode !== 'edit' || !formState.name.trim() || !sharedEmployeePortalPassword}>
                       <Copy size={15} /> คัดลอกข้อความพร้อมส่ง
                     </button>
-                    <button type="button" className="ghost-button employee-login-copy-button" onClick={handleCopyEmployeeShortCredentials} disabled={mode !== 'edit' || !formState.name.trim() || !formState.phone.trim() || !formState.password.trim()}>
+                    <button type="button" className="ghost-button employee-login-copy-button" onClick={handleCopyEmployeeShortCredentials} disabled={mode !== 'edit' || !formState.name.trim() || !sharedEmployeePortalPassword}>
                       <Copy size={15} /> คัดลอกข้อความสั้น Line/SMS
                     </button>
-                    {mode === 'edit' ? <button type="button" className="ghost-button employee-login-copy-button" onClick={handleResetEmployeePassword}>สร้างรหัสผ่านใหม่</button> : null}
+                    {mode === 'edit' ? <Link className="ghost-button employee-login-copy-button" to={routePaths.settings}>ไปตั้งค่ารหัสรวมพนักงาน</Link> : null}
                   </div>
 
                   <div className="employee-access-preview-card">
                     <span>ข้อมูลที่พนักงานใช้ตอนนี้</span>
-                    <strong>{formState.phone || '-'}</strong>
-                    <small>รหัสผ่าน {formState.password || '-'}</small>
+                    <strong>{formState.name || '-'}</strong>
+                    <small>รหัสรวม {sharedEmployeePortalPassword || '-'}</small>
                   </div>
                 </aside>
               </div>
@@ -1761,6 +1740,7 @@ export function SettingsPage() {
   const [formState, setFormState] = useState(settings);
   const [saveMessage, setSaveMessage] = useState('');
   const [showManagerPassword, setShowManagerPassword] = useState(false);
+  const [showEmployeePortalPassword, setShowEmployeePortalPassword] = useState(false);
   const [accessMessage, setAccessMessage] = useState('');
 
   useEffect(() => {
@@ -1792,6 +1772,20 @@ export function SettingsPage() {
       setAccessMessage(`คัดลอกรหัสผ่าน ${formState.managerPassword} แล้ว`);
     } catch {
       setAccessMessage('คัดลอกรหัสผ่านผู้จัดการไม่สำเร็จ ลองใหม่อีกครั้ง');
+    }
+  };
+
+  const handleCopyEmployeePortalPassword = async () => {
+    if (!formState.employeePortalPassword) {
+      setAccessMessage('ยังไม่มีรหัสผ่านรวมพนักงานให้คัดลอก');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(formState.employeePortalPassword);
+      setAccessMessage(`คัดลอกรหัสรวมพนักงาน ${formState.employeePortalPassword} แล้ว`);
+    } catch {
+      setAccessMessage('คัดลอกรหัสรวมพนักงานไม่สำเร็จ ลองใหม่อีกครั้ง');
     }
   };
 
@@ -1833,6 +1827,18 @@ export function SettingsPage() {
                 </div>
               </label>
               <label className="field-group form-grid-full">
+                <span>รหัสผ่านรวมพนักงาน</span>
+                <div className="employee-access-password-row settings-password-row">
+                  <input className="text-input employee-access-password-input" name="employeePortalPassword" type={showEmployeePortalPassword ? 'text' : 'password'} value={formState.employeePortalPassword ?? ''} onChange={handleChange} />
+                  <button type="button" className="employee-access-password-toggle" onClick={() => setShowEmployeePortalPassword((currentValue) => !currentValue)} aria-label={showEmployeePortalPassword ? 'ซ่อนรหัสผ่านรวมพนักงาน' : 'แสดงรหัสผ่านรวมพนักงาน'}>
+                    {showEmployeePortalPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                  <button type="button" className="ghost-button employee-access-inline-copy" onClick={handleCopyEmployeePortalPassword}>
+                    <Copy size={15} /> คัดลอก
+                  </button>
+                </div>
+              </label>
+              <label className="field-group form-grid-full">
                 <span>มุมมองเริ่มต้น</span>
                 <input className="text-input" name="preferredView" value="Desktop Schedule" readOnly />
               </label>
@@ -1843,7 +1849,7 @@ export function SettingsPage() {
                 <span className="settings-access-note-icon"><ShieldCheck size={18} /></span>
                 <div>
                   <strong>ข้อมูลที่ใช้ตอนนี้</strong>
-                  <p>ใช้ข้อมูลชุดนี้สำหรับเข้า manager login ของสาขา</p>
+                  <p>ใช้ข้อมูลชุดนี้สำหรับเข้า manager login และกำหนดรหัสผ่านรวมของหน้า employee portal</p>
                 </div>
               </div>
 
@@ -1856,6 +1862,10 @@ export function SettingsPage() {
                   <span className="settings-access-note-label"><LockKeyhole size={14} /> รหัสผ่าน</span>
                   <b>{formState.managerPassword || '-'}</b>
                 </div>
+                <div className="settings-access-note-row">
+                  <span className="settings-access-note-label"><Users size={14} /> รหัสรวมพนักงาน</span>
+                  <b>{formState.employeePortalPassword || '-'}</b>
+                </div>
               </div>
             </div>
 
@@ -1864,6 +1874,7 @@ export function SettingsPage() {
             <div className="settings-inline-facts">
               <span className="settings-fact-pill">{formState.storeName || 'ยังไม่ได้ตั้งชื่อสาขา'}</span>
               <span className="settings-fact-pill">Manager login</span>
+              <span className="settings-fact-pill">Employee shared password</span>
               <span className="settings-fact-pill">สิทธิ์เต็มของสาขา</span>
             </div>
           </article>

@@ -367,7 +367,7 @@ export const screenCatalog = [
     id: 'employee-login',
     path: routePaths.employeeLogin,
     title: 'เข้าสู่ระบบพนักงาน',
-    description: 'กรอกเบอร์โทรศัพท์และรหัสผ่านก่อนเข้าใช้งานโหมดพนักงาน',
+    description: 'เลือกรายชื่อพนักงานและกรอกรหัสผ่านรวมก่อนเข้าใช้งานโหมดพนักงาน',
     component: EmployeeLoginRoutePage,
   },
   {

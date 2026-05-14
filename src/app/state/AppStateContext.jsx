@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { calendarDaySettings as seedCalendarDaySettings, employeeAvailabilityCalendar as seedEmployeeAvailabilityCalendar, employees as seedEmployees, inventoryItems as seedInventoryItems, issueReports as seedIssueReports, requests as seedRequests, timeBlocks as seedTimeBlocks } from '../../mocks/mockData.js';
-import { isSupabaseConfigured, loadAppStateFromSupabase, loginEmployeePortal, loginManagerPortal, saveAppStateToSupabase, useSupabaseBackend } from '../../services/supabase/index.js';
+import { isSupabaseConfigured, loadAppStateFromSupabase, loginManagerPortal, saveAppStateToSupabase, useSupabaseBackend } from '../../services/supabase/index.js';
 
 const AppStateContext = createContext(null);
 const STORAGE_KEY = 'amazon-schedule-ui/state';
@@ -317,6 +317,7 @@ const initialSettings = {
   managerName: 'ผู้จัดการร้าน',
   managerPhone: '0800000004',
   managerPassword: 'AMZ0004',
+  employeePortalPassword: 'CafeTeam',
   preferredView: 'desktop',
   shortageThreshold: '1',
   notificationsEnabled: true,
@@ -339,6 +340,20 @@ function normalizeSearchValue(value = '') {
 
 function normalizeEmployeeCredential(value = '') {
   return String(value).trim().toLowerCase();
+}
+
+function isEmployeePortalRole(role = '') {
+  return !isManagerRole(role);
+}
+
+function resolveEmployeePortalPassword(settings = null, employees = []) {
+  const settingsPassword = String(settings?.employeePortalPassword ?? '').trim();
+  if (settingsPassword) {
+    return settingsPassword;
+  }
+
+  const rosterEmployee = employees.find((employee) => employee.active !== false && isEmployeePortalRole(employee.role));
+  return String(rosterEmployee?.password ?? '').trim() || initialSettings.employeePortalPassword;
 }
 
 function countMatches(searchText, items = []) {
@@ -418,6 +433,24 @@ function enrichEmployee(employee, index = 0) {
     skills: employee.skills ?? [employee.role],
     availabilityStatus: normalizeEmployeeAvailabilityStatus(employee.availabilityStatus),
   };
+}
+
+function syncEmployeePortalPasswords(employees = [], sharedPassword = '') {
+  const normalizedSharedPassword = String(sharedPassword ?? '').trim();
+  if (!normalizedSharedPassword) {
+    return employees;
+  }
+
+  return employees.map((employee, index) => {
+    if (!isEmployeePortalRole(employee.role)) {
+      return enrichEmployee(employee, index);
+    }
+
+    return enrichEmployee({
+      ...employee,
+      password: normalizedSharedPassword,
+    }, index);
+  });
 }
 
 export function computeBlockStatus(required, assigned) {
@@ -1017,18 +1050,21 @@ function buildInventoryHistoryEntry(previousItem, nextItem, changes) {
 }
 
 function normalizeSettings(settings) {
+  const normalizedEmployeePortalPassword = String(settings?.employeePortalPassword ?? initialSettings.employeePortalPassword).trim() || initialSettings.employeePortalPassword;
   return {
     ...initialSettings,
     ...settings,
     managerName: String(settings?.managerName ?? initialSettings.managerName).trim() || initialSettings.managerName,
     managerPhone: String(settings?.managerPhone ?? initialSettings.managerPhone).trim() || initialSettings.managerPhone,
     managerPassword: String(settings?.managerPassword ?? initialSettings.managerPassword).trim() || initialSettings.managerPassword,
+    employeePortalPassword: normalizedEmployeePortalPassword,
     preferredView: 'desktop',
   };
 }
 
 function buildDefaultState() {
-  const normalizedEmployees = normalizeEmployees(seedEmployees);
+  const normalizedSettings = normalizeSettings(initialSettings);
+  const normalizedEmployees = syncEmployeePortalPasswords(normalizeEmployees(seedEmployees), normalizedSettings.employeePortalPassword);
   const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
   const employeesById = buildEmployeesById(normalizedEmployees);
   const employeeAvailabilityCalendar = normalizeAvailabilityCalendar(seedEmployeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
@@ -1046,7 +1082,7 @@ function buildDefaultState() {
 	inventoryItems: cloneInventoryItems(),
   inventoryHistory: [],
 	issueReports: cloneIssueReports(),
-	settings: normalizeSettings(initialSettings),
+  settings: normalizedSettings,
   };
 }
 
@@ -1072,7 +1108,12 @@ function readInitialState() {
     const persistedEmployeeSessionId = readEmployeePortalSessionId(Number.isFinite(parsedValue.employeePortalSessionId) ? parsedValue.employeePortalSessionId : null);
     if (parsedValue.version !== STATE_VERSION) {
       const migratedEmployees = Array.isArray(parsedValue.employees) ? mergeSeedEmployees(parsedValue.employees) : fallbackState.employees;
-      const normalizedEmployees = normalizeEmployees(migratedEmployees);
+      const baseEmployees = normalizeEmployees(migratedEmployees);
+      const normalizedSettings = normalizeSettings({
+        ...(parsedValue.settings ?? fallbackState.settings),
+        employeePortalPassword: resolveEmployeePortalPassword(parsedValue.settings, baseEmployees),
+      });
+      const normalizedEmployees = syncEmployeePortalPasswords(baseEmployees, normalizedSettings.employeePortalPassword);
       const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
       const employeesById = buildEmployeesById(normalizedEmployees);
       return {
@@ -1099,12 +1140,17 @@ function readInitialState() {
     inventoryItems: Array.isArray(parsedValue.inventoryItems) ? parsedValue.inventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
 		inventoryHistory: Array.isArray(parsedValue.inventoryHistory) ? parsedValue.inventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
 		issueReports: Array.isArray(parsedValue.issueReports) ? parsedValue.issueReports.map((issue) => ({ ...issue })) : fallbackState.issueReports,
-		settings: normalizeSettings(parsedValue.settings ?? fallbackState.settings),
+  		settings: normalizedSettings,
       };
     }
 
     const needsThreeEmployeeMigration = Array.isArray(parsedValue.employees) && parsedValue.employees.length > MAX_EMPLOYEES;
-    const normalizedEmployees = Array.isArray(parsedValue.employees) ? normalizeEmployees(parsedValue.employees) : fallbackState.employees;
+      const baseEmployees = Array.isArray(parsedValue.employees) ? normalizeEmployees(parsedValue.employees) : fallbackState.employees;
+      const normalizedSettings = normalizeSettings({
+        ...(parsedValue.settings ?? fallbackState.settings),
+        employeePortalPassword: resolveEmployeePortalPassword(parsedValue.settings, baseEmployees),
+      });
+      const normalizedEmployees = syncEmployeePortalPasswords(baseEmployees, normalizedSettings.employeePortalPassword);
     const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
     const employeesById = buildEmployeesById(normalizedEmployees);
     const normalizedCalendar = normalizeAvailabilityCalendar(parsedValue.employeeAvailabilityCalendar, allowedEmployeeIds, normalizedEmployees);
@@ -1126,7 +1172,7 @@ function readInitialState() {
     inventoryItems: Array.isArray(parsedValue.inventoryItems) ? parsedValue.inventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
 		inventoryHistory: Array.isArray(parsedValue.inventoryHistory) ? parsedValue.inventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
 		issueReports: Array.isArray(parsedValue.issueReports) ? parsedValue.issueReports.map((issue) => ({ ...issue })) : fallbackState.issueReports,
-		settings: normalizeSettings(parsedValue.settings ?? fallbackState.settings),
+		settings: normalizedSettings,
     };
   } catch {
     return fallbackState;
@@ -1144,7 +1190,12 @@ function hydrateSupabaseState(remoteState, previousState) {
   const sourceEmployees = remoteSnapshotLooksIncomplete
     ? previousState?.employees ?? fallbackState.employees
     : remoteState?.employees ?? fallbackState.employees;
-  const normalizedEmployees = normalizeEmployees(sourceEmployees);
+  const baseEmployees = normalizeEmployees(sourceEmployees);
+  const normalizedSettings = normalizeSettings({
+    ...(remoteSnapshotLooksIncomplete ? previousState?.settings : remoteState?.settings ?? fallbackState.settings),
+    employeePortalPassword: resolveEmployeePortalPassword(remoteSnapshotLooksIncomplete ? previousState?.settings : remoteState?.settings, baseEmployees),
+  });
+  const normalizedEmployees = syncEmployeePortalPasswords(baseEmployees, normalizedSettings.employeePortalPassword);
   const allowedEmployeeIds = new Set(normalizedEmployees.map((employee) => employee.id));
   const employeesById = buildEmployeesById(normalizedEmployees);
   const sourceAvailabilityCalendar = remoteSnapshotLooksIncomplete
@@ -1241,7 +1292,7 @@ function hydrateSupabaseState(remoteState, previousState) {
     inventoryItems: Array.isArray(sourceInventoryItems) ? sourceInventoryItems.map((item) => normalizeInventoryItem(item)) : fallbackState.inventoryItems,
     inventoryHistory: Array.isArray(sourceInventoryHistory) ? sourceInventoryHistory.map((entry) => normalizeInventoryHistoryEntry(entry)) : fallbackState.inventoryHistory,
     issueReports: Array.isArray(sourceIssueReports) ? sourceIssueReports.map((issue) => ({ ...issue })) : fallbackState.issueReports,
-    settings: normalizeSettings(remoteState?.settings ?? fallbackState.settings),
+    settings: normalizedSettings,
   };
 }
 
@@ -2030,11 +2081,13 @@ export function AppStateProvider({ children }) {
   const savedSettings = normalizeSettings({
     ...settings,
     ...nextSettings,
+    employeePortalPassword: String(nextSettings?.employeePortalPassword ?? settings.employeePortalPassword ?? '').trim() || resolveEmployeePortalPassword(settings, employees),
     lastSavedAt: formatDateTime(),
   });
 
     setState((currentState) => ({
       ...currentState,
+      employees: syncEmployeePortalPasswords(currentState.employees, savedSettings.employeePortalPassword),
       settings: savedSettings,
     }));
     return savedSettings;
@@ -2162,8 +2215,8 @@ export function AppStateProvider({ children }) {
       ...employeeInput,
       name: employeeInput.name.trim(),
       role: employeeInput.role.trim(),
-      phone: employeeInput.phone.trim(),
-      password: employeeInput.password?.trim() ?? '',
+      phone: employeeInput.phone?.trim() ?? '',
+      password: isEmployeePortalRole(employeeInput.role) ? settings.employeePortalPassword : employeeInput.password?.trim() ?? '',
       skills: employeeInput.skills,
     });
 
@@ -2189,8 +2242,8 @@ export function AppStateProvider({ children }) {
           ...employeeInput,
           name: employeeInput.name.trim(),
           role: employeeInput.role.trim(),
-          phone: employeeInput.phone.trim(),
-          password: employeeInput.password?.trim() ?? '',
+          phone: employeeInput.phone?.trim() ?? employee.phone ?? '',
+          password: isEmployeePortalRole(employeeInput.role) ? currentState.settings.employeePortalPassword : employeeInput.password?.trim() ?? employee.password ?? '',
           skills: employeeInput.skills,
         });
         return updatedEmployee;
@@ -2223,7 +2276,7 @@ export function AppStateProvider({ children }) {
 
         updatedEmployee = {
           ...employee,
-          password: createResetEmployeePassword(currentState.employees, employeeId, employee.password),
+          password: isEmployeePortalRole(employee.role) ? currentState.settings.employeePortalPassword : createResetEmployeePassword(currentState.employees, employeeId, employee.password),
         };
         return updatedEmployee;
       }),
@@ -2260,31 +2313,13 @@ export function AppStateProvider({ children }) {
     return employee;
   };
 
-  const employeePortalLogin = async (phone, password) => {
-    if (useSupabaseBackend && isSupabaseConfigured) {
-      const matchedEmployee = await loginEmployeePortal(phone, password);
-
-      if (!matchedEmployee) {
-        return null;
-      }
-
-      setState((currentState) => ({
-        ...currentState,
-        employees: currentState.employees.some((employee) => employee.id === matchedEmployee.id)
-          ? currentState.employees.map((employee) => (employee.id === matchedEmployee.id ? { ...employee, ...matchedEmployee } : employee))
-          : normalizeEmployees([...currentState.employees, matchedEmployee]),
-        managerSessionActive: false,
-        employeePortalSessionId: matchedEmployee.id,
-      }));
-
-      return matchedEmployee;
-    }
-
-    const normalizedPhone = normalizeEmployeeCredential(phone);
+  const employeePortalLogin = async (employeeId, password) => {
+    const normalizedEmployeeId = Number(employeeId);
     const normalizedPassword = normalizeEmployeeCredential(password);
-    const matchedEmployee = employees.find((employee) => employee.active !== false && normalizeEmployeeCredential(employee.phone) === normalizedPhone && normalizeEmployeeCredential(employee.password) === normalizedPassword);
+    const sharedPassword = normalizeEmployeeCredential(resolveEmployeePortalPassword(settings, employees));
+    const matchedEmployee = employees.find((employee) => employee.active !== false && isEmployeePortalRole(employee.role) && employee.id === normalizedEmployeeId);
 
-    if (!matchedEmployee) {
+    if (!matchedEmployee || !normalizedPassword || normalizedPassword !== sharedPassword) {
       return null;
     }
 

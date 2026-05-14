@@ -490,12 +490,23 @@ function EmployeeMobileWorkspace({ children, profileAvatar, profileName, profile
   );
 }
 
-function EmployeePortalLoginCard({ onLogin, onSuccess }) {
-  const [phone, setPhone] = useState('');
+function EmployeePortalLoginCard({ employees = [], onLogin, onSuccess }) {
+  const [employeeId, setEmployeeId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!employees.length) {
+      setEmployeeId('');
+      return;
+    }
+
+    setEmployeeId((currentValue) => currentValue && employees.some((employee) => String(employee.id) === currentValue)
+      ? currentValue
+      : String(employees[0].id));
+  }, [employees]);
 
   const handleSubmit = async () => {
     if (isSubmitting) {
@@ -505,9 +516,9 @@ function EmployeePortalLoginCard({ onLogin, onSuccess }) {
     setIsSubmitting(true);
 
     try {
-      const result = await onLogin(phone, password);
+      const result = await onLogin(employeeId, password);
       if (!result) {
-        setError('ไม่พบข้อมูลพนักงานจากเบอร์โทรและรหัสผ่านที่กรอก');
+        setError('รหัสผ่านรวมพนักงานไม่ถูกต้อง หรือยังไม่ได้เลือกรายชื่อพนักงาน');
         return;
       }
 
@@ -525,26 +536,28 @@ function EmployeePortalLoginCard({ onLogin, onSuccess }) {
       <div className="employee-mobile-section-head">
         <div>
           <h3>เข้าสู่ระบบพนักงาน</h3>
-          <p>กรอกเบอร์โทรศัพท์และรหัสผ่านที่ผู้จัดการกำหนดไว้ เพื่อดูตารางกะ แจ้งสต็อก และรายงานปัญหาได้ทันที</p>
+          <p>เลือกรายชื่อพนักงานของคุณ แล้วกรอกรหัสผ่านรวมพนักงานเพื่อดูตารางกะ แจ้งสต็อก และรายงานปัญหาได้ทันที</p>
         </div>
         <Bell size={18} />
       </div>
       <div className="employee-mobile-form-grid employee-mobile-login-form-grid">
         <label className="employee-mobile-login-field">
-          <span>เบอร์โทรศัพท์</span>
-          <input className="text-input" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="เบอร์โทรศัพท์" />
+          <span>รายชื่อพนักงาน</span>
+          <select className="text-input" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
+            {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} • {employee.role}</option>)}
+          </select>
         </label>
         <label className="employee-mobile-login-field">
-          <span>รหัสผ่าน</span>
+          <span>รหัสผ่านรวมพนักงาน</span>
           <div className="employee-mobile-password-shell">
-            <input className="text-input employee-mobile-password-input" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="รหัสผ่าน" />
+            <input className="text-input employee-mobile-password-input" type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="รหัสผ่านรวมพนักงาน" />
             <button type="button" className="employee-mobile-password-toggle" onClick={() => setShowPassword((currentValue) => !currentValue)} aria-label={showPassword ? 'ซ่อนรหัสผ่านพนักงาน' : 'แสดงรหัสผ่านพนักงาน'}>
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
         </label>
         <div className="employee-mobile-login-actions">
-          <button type="button" className="primary-inline employee-mobile-submit" onClick={handleSubmit} disabled={!phone.trim() || !password.trim() || isSubmitting}>{isSubmitting ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button>
+          <button type="button" className="primary-inline employee-mobile-submit" onClick={handleSubmit} disabled={!employeeId || !password.trim() || isSubmitting}>{isSubmitting ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}</button>
           <Link className="employee-mobile-login-manager-link" to={routePaths.managerLogin}>ไปหน้า Login ผู้จัดการ</Link>
         </div>
       </div>
@@ -644,6 +657,7 @@ export function EmployeeMobileLoginPage() {
   const { employeePortalLogin, employeePortalSessionId, employees, isSupabaseSyncReady } = useAppState();
   const currentEmployee = findPortalEmployee(employees, employeePortalSessionId);
   const portalMessage = location.state?.portalMessage ?? '';
+  const availableEmployees = useMemo(() => employees.filter((employee) => employee.active !== false && employee.role !== 'ผู้จัดการร้าน'), [employees]);
 
   if (!isSupabaseSyncReady && Number.isFinite(employeePortalSessionId)) {
     return (
@@ -698,7 +712,7 @@ export function EmployeeMobileLoginPage() {
       </section>
 
       {portalMessage ? <div className="form-success employee-mobile-login-success"><span>{portalMessage}</span></div> : null}
-      <EmployeePortalLoginCard onLogin={employeePortalLogin} onSuccess={() => navigate(routePaths.employeeHome, { replace: true })} />
+      <EmployeePortalLoginCard employees={availableEmployees} onLogin={employeePortalLogin} onSuccess={() => navigate(routePaths.employeeHome, { replace: true })} />
     </EmployeeMobileWorkspace>
   );
 }
