@@ -1872,7 +1872,7 @@ export function SettingsPage() {
             <div className="panel-head">
               <div>
                 <h3>การแจ้งเตือนและผลลัพธ์</h3>
-                <p>ตั้งค่าเฉพาะสิ่งที่มีผลจริง พร้อมสรุปว่าหน้านี้จะไปเปลี่ยนอะไรในระบบบ้าง</p>
+                <p>ตั้งค่าเงื่อนไขการแจ้งเตือนและพฤติกรรมการปิดคำขอของระบบ</p>
               </div>
             </div>
 
@@ -1893,27 +1893,12 @@ export function SettingsPage() {
               <input type="checkbox" name="autoCloseResolvedRequests" checked={formState.autoCloseResolvedRequests} onChange={handleChange} />
               <span>ปิดคำขอให้อัตโนมัติเมื่อแก้ไขเสร็จแล้ว</span>
             </label>
-
-            <div className="settings-impact-list">
-              <div className="settings-impact-item">
-                <strong>หน้าหลักและรายงาน</strong>
-                <p>ใช้ชื่อสาขาและชื่อผู้จัดการเป็นข้อมูลอ้างอิงในส่วนหัวและการ์ดสรุป</p>
-              </div>
-              <div className="settings-impact-item">
-                <strong>การแจ้งเตือนกำลังคน</strong>
-                <p>{formState.notificationsEnabled ? `ระบบจะเตือนเมื่อจำนวนคนต่ำกว่าเป้าหมาย ${formState.shortageThreshold} คน` : 'ปิดการเตือนเรื่องจำนวนคนไม่ครบอยู่ในตอนนี้'}</p>
-              </div>
-              <div className="settings-impact-item">
-                <strong>การติดตามคำขอ</strong>
-                <p>{formState.autoCloseResolvedRequests ? 'คำขอที่แก้เสร็จแล้วจะถูกปิดให้อัตโนมัติ' : 'คำขอที่แก้เสร็จแล้วจะยังคงเปิดไว้จนกดปิดเอง'}</p>
-              </div>
-            </div>
           </article>
         </div>
 
         <div className="settings-actions">
-          <button type="submit" className="primary-inline">บันทึกการตั้งค่า</button>
           {saveMessage ? <span className="save-note">{saveMessage}</span> : null}
+          <button type="submit" className="primary-inline">บันทึกการตั้งค่า</button>
         </div>
       </form>
     </DesktopWorkspace>
