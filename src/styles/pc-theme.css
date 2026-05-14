@@ -302,6 +302,7 @@ a, button {
 /* === CONTENT AREA === */
 .desktop-content {
   padding: 20px;
+  overflow-x: hidden;
   overflow-y: auto;
   flex: 1; /* Take up vertical space and enable scroll only here */
   min-height: 0;
@@ -4244,7 +4245,7 @@ a, button {
 }
 
 .settings-form {
-  max-width: 1400px;
+  width: min(100%, 1360px);
   margin: 0 auto var(--space-md);
 }
 
@@ -4259,7 +4260,7 @@ a, button {
 
 .settings-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(340px, 0.82fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
   gap: 16px;
   align-items: start;
 }
@@ -4287,6 +4288,17 @@ a, button {
   grid-template-columns: minmax(0, 1fr) 44px auto;
   gap: 8px;
   align-items: stretch;
+}
+
+@media (max-width: 1320px) {
+  .settings-password-row {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .settings-password-row .employee-access-inline-copy {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
 }
 
 .settings-password-row .employee-access-inline-copy {

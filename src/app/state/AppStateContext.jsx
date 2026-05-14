@@ -1448,13 +1448,43 @@ export function AppStateProvider({ children }) {
     }
 
     const employeesById = buildEmployeesById(employees);
-    const safeSelectedIds = selectedIds.filter((employeeId) => isEmployeeEligibleForScheduleBlock(employeesById.get(employeeId), block, employeeAttendanceWindows, employeeAvailabilityCalendar));
+    const safeSelectedIds = selectedIds.filter((employeeId) => isEmployeeScheduleEligible(employeesById.get(employeeId), block.dateKey, employeeAvailabilityCalendar));
+    if (!safeSelectedIds.length) {
+      return null;
+    }
+
     const nextEmployeeIds = [...new Set([...block.employeeIds, ...safeSelectedIds])];
     const updatedBlock = normalizeBlock({ ...block, employeeIds: nextEmployeeIds }, employeesById, block.dateKey);
-    setState((currentState) => ({
-      ...currentState,
-      timeBlocks: currentState.timeBlocks.map((entry) => (entry.id === blockId ? updatedBlock : entry)),
-    }));
+
+    setState((currentState) => {
+      const windowKey = getAttendanceWindowKey(block);
+      const windowDateKey = String(block.dateKey ?? formatDateKey());
+      const nextDateWindows = Object.fromEntries(
+        Object.entries(currentState.employeeAttendanceWindows?.[windowDateKey] ?? {}).map(([entryKey, entryValue]) => {
+          const nextWindowEmployeeIds = entryKey === windowKey
+            ? [...new Set([...(entryValue.employeeIds ?? []), ...safeSelectedIds])]
+            : (entryValue.employeeIds ?? []).filter((employeeId) => !safeSelectedIds.includes(employeeId));
+
+          return [entryKey, { ...entryValue, employeeIds: nextWindowEmployeeIds }];
+        }).filter(([, entryValue]) => entryValue.employeeIds.length),
+      );
+
+      const currentWindow = nextDateWindows[windowKey] ?? currentState.employeeAttendanceWindows?.[windowDateKey]?.[windowKey] ?? block;
+      nextDateWindows[windowKey] = {
+        ...buildAttendanceWindowEntry(currentWindow, windowKey),
+        employeeIds: [...new Set([...(currentWindow.employeeIds ?? []), ...safeSelectedIds])],
+      };
+
+      return {
+        ...currentState,
+        employeeAttendanceWindows: {
+          ...(currentState.employeeAttendanceWindows ?? {}),
+          [windowDateKey]: nextDateWindows,
+        },
+        timeBlocks: currentState.timeBlocks.map((entry) => (entry.id === blockId ? updatedBlock : entry)),
+      };
+    });
+
     return updatedBlock;
   };
 

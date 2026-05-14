@@ -456,7 +456,7 @@ export function EmployeesPage() {
   const sharedEmployeePortalPassword = String(settings.employeePortalPassword ?? '').trim();
 
   const filteredEmployees = useMemo(() => employees.filter((employee) => {
-    const matchesQuery = query.trim() ? `${employee.name} ${employee.role} ${employee.employeeCode ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()) : true;
+    const matchesQuery = query.trim() ? `${employee.name} ${employee.role}`.toLowerCase().includes(query.trim().toLowerCase()) : true;
     const matchesRole = roleFilter === 'all' ? true : employee.role === roleFilter;
     return matchesQuery && matchesRole;
   }), [employees, query, roleFilter]);
@@ -513,7 +513,7 @@ export function EmployeesPage() {
 
   useEffect(() => {
     setCopyMessage('');
-  }, [mode, selectedEmployeeId, formState.employeeCode, sharedEmployeePortalPassword]);
+  }, [mode, selectedEmployeeId, sharedEmployeePortalPassword]);
 
   useEffect(() => {
     setEditorTab('profile');
@@ -699,7 +699,7 @@ export function EmployeesPage() {
           </div>
 
           <div className="employee-toolbar">
-            <input className="text-input" placeholder="ค้นหาชื่อ รหัส หรือบทบาท" value={query} onChange={(event) => setQuery(event.target.value)} />
+            <input className="text-input" placeholder="ค้นหาชื่อหรือบทบาท" value={query} onChange={(event) => setQuery(event.target.value)} />
             <select className="text-input" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
               <option value="all">ทุกบทบาท</option>
               {employeeRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -721,7 +721,6 @@ export function EmployeesPage() {
                       <small>{employee.active ? 'พร้อมใช้งาน' : 'พักงาน'}</small>
                     </span>
                     <span className="employee-list-meta-row">
-                      <small>รหัส {employee.employeeCode}</small>
                       <small>{assignments.length ? `กะ ${assignments.length}` : 'ยังไม่ลงกะ'}</small>
                     </span>
                   </span>
@@ -763,10 +762,6 @@ export function EmployeesPage() {
                     <label className="field-group">
                       <span>ชื่อพนักงาน</span>
                       <input className="text-input" name="name" value={formState.name} onChange={handleChange} />
-                    </label>
-                    <label className="field-group">
-                      <span>รหัสพนักงาน</span>
-                      <input className="text-input" value={mode === 'create' ? 'สร้างอัตโนมัติเมื่อบันทึก' : formState.employeeCode} readOnly />
                     </label>
                   </div>
 
@@ -839,13 +834,7 @@ export function EmployeesPage() {
                       </div>
                     </label>
                   </div>
-
-                  <label className="field-group employee-editor-full">
-                    <span>รหัสพนักงาน</span>
-                    <input className="text-input" value={mode === 'create' ? 'สร้างอัตโนมัติเมื่อบันทึก' : formState.employeeCode} readOnly />
-                  </label>
-
-                  <small className="employee-login-credential-note">พนักงานใช้การเลือกรายชื่อของตัวเองและรหัสผ่านรวมพนักงานสำหรับเข้าโหมดพนักงาน ส่วนรหัสพนักงานเก็บไว้เป็นข้อมูลอ้างอิงในระบบ</small>
+                  <small className="employee-login-credential-note">พนักงานใช้การเลือกรายชื่อของตัวเองและรหัสผ่านรวมพนักงานสำหรับเข้าโหมดพนักงาน</small>
                   {copyMessage ? <small className="employee-login-copy-status">{copyMessage}</small> : null}
                 </section>
 
