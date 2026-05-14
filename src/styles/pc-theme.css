@@ -5188,6 +5188,22 @@ a, button {
   gap: 8px;
 }
 
+.employee-mobile-login-help {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.employee-mobile-login-help strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.employee-mobile-login-help span {
+  color: #475569;
+  font-size: 12px;
+}
+
 .employee-mobile-login-benefits span {
   display: inline-flex;
   align-items: center;

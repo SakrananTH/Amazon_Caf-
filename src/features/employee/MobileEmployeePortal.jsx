@@ -561,6 +561,11 @@ function EmployeePortalLoginCard({ employees = [], onLogin, onSuccess }) {
           <Link className="employee-mobile-login-manager-link" to={routePaths.managerLogin}>ไปหน้า Login ผู้จัดการ</Link>
         </div>
       </div>
+        <div className="compact-home-note employee-mobile-login-help">
+          <strong>วิธีเข้าใช้งาน</strong>
+          <span>1. เลือกรายชื่อของตัวเองจากรายการพนักงาน</span>
+          <span>2. ใส่รหัสผ่านรวมพนักงานที่ผู้จัดการตั้งไว้</span>
+        </div>
       <div className="employee-mobile-login-benefits">
         <span>ดูตารางกะของตัวเอง</span>
         <span>เช็กสต็อกที่ต้องตามต่อ</span>
