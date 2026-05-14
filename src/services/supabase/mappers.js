@@ -65,13 +65,17 @@ function normalizeAttendanceWindows(value) {
   }, {});
 }
 
+function isInternalEmployeePhoneValue(value) {
+  return /^__employee_placeholder_\d+__$/.test(String(value ?? '').trim());
+}
+
 export function mapEmployeeRow(row) {
   return {
     id: Number(row.id),
     name: row.name,
     role: row.role,
     avatar: row.avatar ?? '👨🏻',
-    phone: row.phone ?? '',
+    phone: isInternalEmployeePhoneValue(row.phone) ? '' : (row.phone ?? ''),
     password: row.password ?? row.employee_code ?? '',
     employeeCode: row.employee_code ?? `EMP${row.id}`,
     availabilityStatus: row.availability_status ?? 'ready',
@@ -118,6 +122,10 @@ export function mapScheduleRows(blockRows, assignmentRows) {
     id: Number(row.id),
     dateKey: formatDateKey(row.date_key),
     time: row.time_label,
+    startTime: row.start_time ?? '',
+    endTime: row.end_time ?? '',
+    roundPresetKey: row.round_preset_key ?? '',
+    roundLabel: row.round_label ?? '',
     title: row.title,
     required: Number(row.required),
     status: row.status ?? 'ok',
@@ -192,6 +200,7 @@ export function mapSettingsRow(row) {
       managerName: row?.manager_name ?? 'ผู้จัดการร้าน',
       managerPhone: row?.manager_phone ?? '',
       managerPassword: row?.manager_password ?? '',
+      employeePortalPassword: row?.employee_portal_password ?? '',
       preferredView: row?.preferred_view ?? 'desktop',
       shortageThreshold: row?.shortage_threshold ?? '1',
       notificationsEnabled: row?.notifications_enabled ?? true,

@@ -1,5 +1,7 @@
 import { requireSupabase } from './client.js';
 
+let schemaCapabilitiesPromise = null;
+
 function unwrapResult(result, label) {
   if (result.error) {
     throw new Error(`${label}: ${result.error.message}`);
@@ -69,6 +71,35 @@ function serializeAppSettings(state = {}) {
   };
 }
 
+function buildInternalEmployeePhoneValue(employeeId) {
+  return `__employee_placeholder_${employeeId}__`;
+}
+
+async function readColumnCapability(client, table, columns) {
+  const selectColumns = columns.join(',');
+  const result = await client.from(table).select(selectColumns).limit(1);
+  if (!result.error) {
+    return true;
+  }
+
+  if (String(result.error.message ?? '').includes('does not exist')) {
+    return false;
+  }
+
+  throw new Error(`schema capability ${table}: ${result.error.message}`);
+}
+
+async function getSchemaCapabilities(client) {
+  if (!schemaCapabilitiesPromise) {
+    schemaCapabilitiesPromise = (async () => ({
+      appSettingsEmployeePortalPassword: await readColumnCapability(client, 'app_settings', ['employee_portal_password']),
+      scheduleBlockMetadata: await readColumnCapability(client, 'schedule_blocks', ['start_time', 'end_time', 'round_preset_key', 'round_label']),
+    }))();
+  }
+
+  return schemaCapabilitiesPromise;
+}
+
 function serializeEmployees(employees = []) {
   return employees.map((employee, index) => ({
     id: Number(employee.id ?? index + 1),
@@ -76,7 +107,7 @@ function serializeEmployees(employees = []) {
     name: String(employee.name ?? '').trim(),
     role: String(employee.role ?? '').trim(),
     avatar: String(employee.avatar ?? '').trim() || null,
-    phone: String(employee.phone ?? '').trim(),
+    phone: String(employee.phone ?? '').trim() || buildInternalEmployeePhoneValue(Number(employee.id ?? index + 1)),
     password: String(employee.password ?? '').trim(),
     active: employee.active !== false,
     availability_status: String(employee.availabilityStatus ?? 'ready').trim() || 'ready',
@@ -102,7 +133,7 @@ function serializeCalendarDaySettings(settings = {}) {
   })).filter((row) => row.date_key);
 }
 
-function serializeTimeBlocks(timeBlocks = []) {
+function serializeTimeBlocks(timeBlocks = [], schemaCapabilities = {}) {
   const scheduleBlocks = [];
   const scheduleAssignments = [];
 
@@ -113,7 +144,7 @@ function serializeTimeBlocks(timeBlocks = []) {
       return;
     }
 
-    scheduleBlocks.push({
+    const serializedBlock = {
       id: blockId,
       date_key: dateKey,
       time_label: String(block.time ?? '').trim(),
@@ -122,7 +153,16 @@ function serializeTimeBlocks(timeBlocks = []) {
       status: String(block.status ?? 'ok').trim() || 'ok',
       tasks: Array.isArray(block.tasks) ? block.tasks.filter(Boolean).map((task) => String(task)) : [],
       template_id: block.templateId ? String(block.templateId) : null,
-    });
+    };
+
+    if (schemaCapabilities.scheduleBlockMetadata) {
+      serializedBlock.start_time = String(block.startTime ?? '').trim() || null;
+      serializedBlock.end_time = String(block.endTime ?? '').trim() || null;
+      serializedBlock.round_preset_key = String(block.roundPresetKey ?? '').trim() || null;
+      serializedBlock.round_label = String(block.roundLabel ?? '').trim() || null;
+    }
+
+    scheduleBlocks.push(serializedBlock);
 
     const employeeIds = Array.isArray(block.employeeIds) ? [...new Set(block.employeeIds.map((employeeId) => Number(employeeId)).filter(Number.isFinite))] : [];
     employeeIds.forEach((employeeId) => {
@@ -295,11 +335,16 @@ async function deleteStaleCompositeRows(client, table, {
   await Promise.all(deletions);
 }
 
-export function createPersistedStatePayload(state) {
-  const { scheduleAssignments, scheduleBlocks } = serializeTimeBlocks(state.timeBlocks);
+export function createPersistedStatePayload(state, schemaCapabilities = {}) {
+  const { scheduleAssignments, scheduleBlocks } = serializeTimeBlocks(state.timeBlocks, schemaCapabilities);
+
+  const appSettings = serializeAppSettings(state);
+  if (schemaCapabilities.appSettingsEmployeePortalPassword) {
+    appSettings.employee_portal_password = String(state.settings?.employeePortalPassword ?? '').trim() || null;
+  }
 
   return {
-    appSettings: serializeAppSettings(state),
+    appSettings,
     employees: serializeEmployees(state.employees),
     employeeAvailability: serializeEmployeeAvailability(state.employeeAvailabilityCalendar),
     calendarDaySettings: serializeCalendarDaySettings(state.calendarDaySettings),
@@ -314,7 +359,8 @@ export function createPersistedStatePayload(state) {
 
 export async function saveAppStateToSupabase(state) {
   const client = requireSupabase();
-  const payload = createPersistedStatePayload(state);
+  const schemaCapabilities = await getSchemaCapabilities(client);
+  const payload = createPersistedStatePayload(state, schemaCapabilities);
 
   await runQuery(
     client.from('app_settings').upsert(payload.appSettings, { onConflict: 'id' }),
