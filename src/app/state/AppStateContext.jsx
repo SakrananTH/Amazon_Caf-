@@ -1716,12 +1716,24 @@ export function AppStateProvider({ children }) {
       ...normalizedInput,
     }, buildEmployeesById(employees), normalizedInput.dateKey);
 
-    setState((currentState) => ({
-      ...currentState,
-      timeBlocks: existingBlock
+    setState((currentState) => {
+      const nextTimeBlocks = existingBlock
         ? currentState.timeBlocks.map((entry) => (entry.id === existingBlock.id ? nextBlock : entry))
-        : [...currentState.timeBlocks, nextBlock],
-    }));
+        : [...currentState.timeBlocks, nextBlock];
+      const nextEmployeesById = buildEmployeesById(currentState.employees);
+      const allowedEmployeeIds = new Set(currentState.employees.map((employee) => employee.id));
+
+      return {
+        ...currentState,
+        timeBlocks: nextTimeBlocks,
+        employeeAttendanceWindows: normalizeEmployeeAttendanceWindows(
+          buildAttendanceWindowsFromBlocks(nextTimeBlocks, allowedEmployeeIds),
+          allowedEmployeeIds,
+          nextEmployeesById,
+          currentState.employeeAvailabilityCalendar,
+        ),
+      };
+    });
 
     return nextBlock;
   };
