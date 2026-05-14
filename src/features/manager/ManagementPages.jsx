@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRight, BarChart3, Bell, Clock3, Copy, Eye, EyeOff, LogIn, LockKeyhole, PackageSearch, PencilLine, ShieldCheck, Smartphone, Store, TriangleAlert, UserPlus2, Users, UserX } from 'lucide-react';
+import { ArrowRight, BarChart3, Bell, CheckCircle2, Clock3, Copy, Eye, EyeOff, LogIn, LockKeyhole, PackageSearch, PencilLine, ShieldCheck, Smartphone, Store, TriangleAlert, UserPlus2, Users, UserX, X } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import DesktopWorkspace, { employeeNavItems } from './DesktopWorkspace.jsx';
 import EmployeeChip, { buildRoleMetadataSkills, employeeChipLegendItems, employeeRoleOptions, getRoleClassName, getRolePresentation, stripRoleMetadataSkills } from '../shared/EmployeeChip.jsx';
@@ -448,7 +448,7 @@ export function EmployeesPage() {
   const [mode, setMode] = useState('edit');
   const [editorTab, setEditorTab] = useState('profile');
   const [formState, setFormState] = useState(createEmployeeDraft);
-  const [saveMessage, setSaveMessage] = useState('');
+  const [saveNotice, setSaveNotice] = useState(null);
   const [copyMessage, setCopyMessage] = useState('');
   const [showEmployeePassword, setShowEmployeePassword] = useState(false);
   const [isRoleEditorOpen, setIsRoleEditorOpen] = useState(false);
@@ -510,6 +510,18 @@ export function EmployeesPage() {
       setSelectedEmployeeId(employees[0]?.id ?? null);
     }
   }, [employeeLimitReached, employees, mode]);
+
+  useEffect(() => {
+    if (!saveNotice) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setSaveNotice(null);
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [saveNotice]);
 
   useEffect(() => {
     setCopyMessage('');
@@ -597,6 +609,14 @@ export function EmployeesPage() {
     }),
   });
 
+  const showSaveNotice = (title, message) => {
+    setSaveNotice({
+      id: Date.now(),
+      title,
+      message,
+    });
+  };
+
   const handleSubmit = (event) => {
     event.preventDefault();
     const payload = normalizePayload();
@@ -608,24 +628,36 @@ export function EmployeesPage() {
     if (mode === 'create') {
       const nextEmployee = createEmployee(payload);
       if (!nextEmployee) {
-        setSaveMessage(`ร้านนี้กำหนดพนักงานได้สูงสุด ${MAX_EMPLOYEES} คน`);
+        showSaveNotice('บันทึกไม่สำเร็จ', `ร้านนี้กำหนดพนักงานได้สูงสุด ${MAX_EMPLOYEES} คน`);
         return;
       }
 
       setSelectedEmployeeId(nextEmployee.id);
       setMode('edit');
-      setSaveMessage(`เพิ่มพนักงาน ${nextEmployee.name} แล้ว • ใช้รหัสรวมพนักงาน ${sharedEmployeePortalPassword}`);
+      showSaveNotice('เพิ่มพนักงานสำเร็จ', `เพิ่มพนักงาน ${nextEmployee.name} แล้ว • ใช้รหัสรวมพนักงาน ${sharedEmployeePortalPassword}`);
       return;
     }
 
     if (!selectedEmployee) {
+      const recoveredEmployee = createEmployee(payload);
+      if (!recoveredEmployee) {
+        showSaveNotice('บันทึกไม่สำเร็จ', `ยังไม่พบพนักงานเดิมในระบบ และร้านนี้กำหนดพนักงานได้สูงสุด ${MAX_EMPLOYEES} คน`);
+        return;
+      }
+
+      setSelectedEmployeeId(recoveredEmployee.id);
+      setMode('edit');
+      showSaveNotice('กู้คืนและบันทึกสำเร็จ', `สร้างข้อมูลพนักงาน ${recoveredEmployee.name} ใหม่จากฟอร์มที่เปิดอยู่แล้ว`);
       return;
     }
 
     const updatedEmployee = updateEmployee(selectedEmployee.id, payload);
     if (updatedEmployee) {
-      setSaveMessage(`บันทึกข้อมูลของ ${updatedEmployee.name} แล้ว • ใช้รหัสรวมพนักงาน ${sharedEmployeePortalPassword}`);
+      showSaveNotice('บันทึกข้อมูลสำเร็จ', `บันทึกข้อมูลของ ${updatedEmployee.name} แล้ว • ใช้รหัสรวมพนักงาน ${sharedEmployeePortalPassword}`);
+      return;
     }
+
+    showSaveNotice('บันทึกไม่สำเร็จ', 'ระบบไม่สามารถอัปเดตข้อมูลพนักงานคนนี้ได้ ลองอีกครั้ง');
   };
 
   const handleDelete = () => {
@@ -641,7 +673,7 @@ export function EmployeesPage() {
     const nextSelected = employees.find((employee) => employee.id !== removedEmployee.id);
     setSelectedEmployeeId(nextSelected?.id ?? null);
     setMode(nextSelected ? 'edit' : 'create');
-    setSaveMessage(`ลบ ${removedEmployee.name} ออกจากระบบแล้ว`);
+    showSaveNotice('ลบพนักงานแล้ว', `ลบ ${removedEmployee.name} ออกจากระบบแล้ว`);
   };
 
   const handleCopyEmployeePassword = async () => {
@@ -686,7 +718,7 @@ export function EmployeesPage() {
   };
 
   return (
-    <DesktopWorkspace title="พนักงาน" headerActions={employeeLimitReached ? null : <button type="button" className="ghost-button" onClick={() => { setMode('create'); setSelectedEmployeeId(null); setSaveMessage(''); }}><UserPlus2 size={16} /> เพิ่มพนักงาน</button>}>
+    <DesktopWorkspace title="พนักงาน" headerActions={employeeLimitReached ? null : <button type="button" className="ghost-button" onClick={() => { setMode('create'); setSelectedEmployeeId(null); setSaveNotice(null); }}><UserPlus2 size={16} /> เพิ่มพนักงาน</button>}>
       <section className="employee-page-layout">
         <article className="panel-card employee-list-panel">
           <div className="panel-head">
@@ -712,7 +744,7 @@ export function EmployeesPage() {
               const isSelected = mode === 'edit' && selectedEmployeeId === employee.id;
               const availabilityMeta = getEmployeeAvailabilityMeta(employee);
               return (
-                <button key={employee.id} type="button" className={`employee-list-item availability-${availabilityMeta.value} tone-${availabilityMeta.tone} ${isSelected ? 'selected' : ''}`} onClick={() => { setMode('edit'); setSelectedEmployeeId(employee.id); setSaveMessage(''); }}>
+                <button key={employee.id} type="button" className={`employee-list-item availability-${availabilityMeta.value} tone-${availabilityMeta.tone} ${isSelected ? 'selected' : ''}`} onClick={() => { setMode('edit'); setSelectedEmployeeId(employee.id); setSaveNotice(null); }}>
                   <span className="employee-list-avatar">{employee.avatar}</span>
                   <span className="employee-list-copy">
                     <strong>{employee.name}</strong>
@@ -967,9 +999,22 @@ export function EmployeesPage() {
               </section>
             </div>
           ) : null}
-
-          {saveMessage ? <div className="form-success top-spaced"><span>{saveMessage}</span></div> : null}
         </form>
+
+        {saveNotice ? (
+          <div className="employee-save-toast" role="status" aria-live="polite">
+            <div className="employee-save-toast-card">
+              <span className="employee-save-toast-icon" aria-hidden="true"><CheckCircle2 size={18} /></span>
+              <div className="employee-save-toast-copy">
+                <strong>{saveNotice.title}</strong>
+                <p>{saveNotice.message}</p>
+              </div>
+              <button type="button" className="employee-save-toast-close" onClick={() => setSaveNotice(null)} aria-label="ปิดการแจ้งเตือน">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
     </DesktopWorkspace>
   );
